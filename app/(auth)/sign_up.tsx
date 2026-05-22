@@ -22,6 +22,8 @@ const SignUp = () => {
         "Please enter valid name,email and password ",
         "Error",
       );
+    if (password.length < 8)
+      return utils.showAlert("Password must be 8 characters long", "Error");
     setIsSubmitting(true);
     try {
       appwrite
@@ -67,7 +69,6 @@ const SignUp = () => {
       <CustomInput
         placeholder="Enter your password"
         label="Password"
-        maxLength={8}
         value={form.password}
         returnKeyType="done"
         onChangeText={(text) =>

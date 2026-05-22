@@ -70,7 +70,7 @@
   }
 
   .searchbar {
-    @apply relative flex flex-row items-center justify-center w-full bg-white shadow-md shadow-black/10 rounded-full  font-quicksand-medium text-dark-100 gap-5;
+    @apply relative flex flex-row items-center justify-center w-full bg-white shadow-md shadow-black/10 rounded-full gap-5;
   }
 
   .tab-icon {

@@ -52,7 +52,7 @@ const SignIn = () => {
         placeholder="Enter your password"
         label="Password"
         value={form.password}
-        maxLength={8}
+        maxLength={20}
         onChangeText={(text) =>
           setForm((prev) => ({ ...prev, password: text }))
         }
