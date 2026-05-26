@@ -4,6 +4,9 @@ import { useEffect } from "react";
 import "react-native-url-polyfill/auto";
 import "./globals.css";
 import { AppwriteProvider } from "./lib/services/auth_services/AppwirteContext";
+import { CartProvider } from "./lib/services/cart_services/CartContext";
+import { Provider } from "react-redux";
+import { store } from "../store/store";
 
 export default function RootLayout() {
   const [fontsLoaded, error] = useFonts({
@@ -19,8 +22,12 @@ export default function RootLayout() {
   }, [fontsLoaded, error]);
 
   return (
-    <AppwriteProvider>
-      <Stack screenOptions={{ headerShown: false }} />
-    </AppwriteProvider>
+    <Provider store={store}>
+      <AppwriteProvider>
+        <CartProvider>
+          <Stack screenOptions={{ headerShown: false }} />
+        </CartProvider>
+      </AppwriteProvider>
+    </Provider>
   );
 }

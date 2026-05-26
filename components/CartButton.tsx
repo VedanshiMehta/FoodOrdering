@@ -1,11 +1,14 @@
+import CartContext from "@/app/lib/services/cart_services/CartContext";
 import { images } from "@/constants";
-import React from "react";
+import { router } from "expo-router";
+import React, { useContext } from "react";
 import { Image, Text, TouchableOpacity, View } from "react-native";
 
 const CartButton = () => {
-  const totalItems = 3; // Example total items in the cart
+  const { getTotalItems } = useContext(CartContext);
+  const totalItems = getTotalItems(); // Example total items in the cart
   return (
-    <TouchableOpacity className="cart-btn" onPress={() => {}}>
+    <TouchableOpacity className="cart-btn" onPress={() => router.push("/cart")}>
       <Image source={images.bag} className="size-5" resizeMode="contain" />
       {totalItems > 0 && (
         <View className="cart-badge">

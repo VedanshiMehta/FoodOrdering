@@ -136,4 +136,23 @@
   .small-bold {
     @apply text-xs font-quicksand-bold;
   }
+  .location-btn {
+    @apply border border-primary rounded-full px-5 py-3 flex items-center justify-center bg-white;
+  }
+
+  .location-btn-text {
+    @apply text-primary paragraph-medium;
+  }
+
+  .profile-btn {
+    @apply rounded-full p-4 w-full flex items-center justify-center;
+  }
+
+  .logout-btn {
+    @apply bg-red-500;
+  }
+
+  .edit-profile-btn {
+    @apply bg-primary;
+  }
 }

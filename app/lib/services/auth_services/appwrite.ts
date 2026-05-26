@@ -79,6 +79,11 @@ class AppwriteService {
 
   async login({ email, password }: SignInParams) {
     try {
+      try {
+        await this.account.deleteSession('current');
+      } catch (e) {
+        // Ignored. Just means no session existed.
+      }
       return await this.account.createEmailPasswordSession({
         email: email,
         password: password,

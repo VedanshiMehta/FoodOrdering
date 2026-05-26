@@ -2,11 +2,12 @@ import CartButton from "@/components/CartButton";
 import Filter from "@/components/Filter";
 import MenuCard from "@/components/MenuCard";
 import SearchBar from "@/components/SearchBar";
+import { images } from "@/constants";
 import { Category, MenuItem } from "@/type";
 import cn from "clsx";
 import { useLocalSearchParams } from "expo-router";
 import React, { useContext, useEffect } from "react";
-import { FlatList, Text, View } from "react-native";
+import { FlatList, Image, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import useAppwrite from "../lib/services/appwrite_data_services/useApprwriteData";
 import AppwriteContext from "../lib/services/auth_services/AppwirteContext";
@@ -75,7 +76,23 @@ const Search = () => {
             <Filter categories={(categories as unknown as Category[]) ?? []} />
           </View>
         )}
-        ListEmptyComponent={() => !loading && <Text>No results</Text>}
+        ListEmptyComponent={() =>
+          !loading && (
+            <View className="flex-1 items-center justify-center">
+              <Image
+                source={images.emptyState}
+                className="size-40"
+                resizeMode="contain"
+              />
+              <Text className="paragraph-bold text-dark-100 text-center">
+                Nothing matched your serach
+              </Text>
+              <Text className="body-medium text-gray-200 text-center mt-2">
+                Try a different search term or check for typos
+              </Text>
+            </View>
+          )
+        }
       />
     </SafeAreaView>
   );

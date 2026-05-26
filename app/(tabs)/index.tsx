@@ -12,8 +12,17 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { images, offers } from "../../constants";
 import AppwriteContext from "../lib/services/auth_services/AppwirteContext";
+import { useSelector } from "react-redux";
+import { RootState } from "../../store/store";
+import { useRouter } from "expo-router";
+
 export default function Index() {
   const { user } = useContext(AppwriteContext);
+  const { address, flatHouseNo } = useSelector(
+    (state: RootState) => state.location,
+  );
+  const router = useRouter();
+  const deliveryAddress = flatHouseNo || address?.split(",")[0];
   return (
     <SafeAreaView className="flex-1 bg-white">
       <FlatList
@@ -63,13 +72,25 @@ export default function Index() {
         }}
         contentContainerClassName="pb-28 px-5"
         ListHeaderComponent={() => (
-          <View className="flex-between flex-row w-full px-5 pt-5">
+          <View className="flex-between flex-row w-full px-2 pt-5">
             <View className="flex-start">
+              {/* <Text className="h2-bold text-dark-100 ">
+                Welcome {user?.name}
+              </Text> */}
               <Text className="small-bold text-primary uppercase">
                 Deliver To
               </Text>
-              <TouchableOpacity className="flex-center flex-row gap-x-1 mt-0.5">
-                <Text className="paragraph-bold text-dark-100">India</Text>
+              <TouchableOpacity
+                onPress={() => router.push("/select-location" as any)}
+                className="flex-center flex-row gap-x-1 mt-0.5"
+              >
+                <Text
+                  className="paragraph-bold text-dark-100"
+                  numberOfLines={1}
+                  style={{ maxWidth: 150 }}
+                >
+                  {deliveryAddress || "Select Location"}
+                </Text>
                 <Image
                   source={images.arrowDown}
                   className="size-3"
@@ -78,7 +99,6 @@ export default function Index() {
               </TouchableOpacity>
             </View>
             <CartButton />
-            <Text className="h2-bold text-dark-100 ">Welcome {user?.name}</Text>
           </View>
         )}
       />
