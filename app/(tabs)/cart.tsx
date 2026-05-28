@@ -1,14 +1,17 @@
 import CartItem from "@/components/CartItem";
 import CustomButton from "@/components/CustomButton";
+import { images } from "@/constants";
 import { PaymentInfoStripeProps } from "@/type";
 import cn from "clsx";
 import { useRouter } from "expo-router";
 import React, { useContext } from "react";
-import { FlatList, Text, View } from "react-native";
+import { FlatList, Text, View, Alert, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useSelector } from "react-redux";
+import { useSelector, useDispatch } from "react-redux";
 import { RootState } from "../../store/store";
 import CartContext from "../lib/services/cart_services/CartContext";
+import { startCheckout } from "../../store/slices/orderSlice";
+import AppwriteContext from "../lib/services/auth_services/AppwirteContext";
 
 const PaymentInfoStripe = ({
   label,
@@ -26,7 +29,9 @@ const PaymentInfoStripe = ({
   </View>
 );
 const Cart = () => {
+  const dispatch = useDispatch();
   const { items, getTotalItems, getTotalPrice } = useContext(CartContext);
+  const { user } = useContext(AppwriteContext);
   const { address, flatHouseNo } = useSelector(
     (state: RootState) => state.location,
   );
@@ -34,13 +39,42 @@ const Cart = () => {
   const totalItems = getTotalItems();
   const totalPrice = getTotalPrice();
   const deliveryAddress = [flatHouseNo, address].filter(Boolean).join(", ");
+
+  const handleCheckout = () => {
+    if (!address) {
+      Alert.alert(
+        "Location Required",
+        "Please select a delivery location before placing your order.",
+        [
+          { text: "Select Location", onPress: () => router.push("/select-location" as any) },
+          { text: "Cancel", style: "cancel" }
+        ]
+      );
+      return;
+    }
+
+    dispatch(startCheckout({
+      items,
+      total: totalPrice + 5 - 0.5,
+      paymentMethod: "Card",
+      address: deliveryAddress,
+      userId: user?.$id || "guest",
+      userName: user?.name || "Guest User"
+    }));
+
+    router.push("/checkout" as any);
+  };
+
   return (
     <SafeAreaView className="bg-white h-full">
       <FlatList
         data={items}
         renderItem={({ item }) => <CartItem item={item} />}
         keyExtractor={(item) => item.id}
-        contentContainerClassName="pb-28 px-5 pt-5"
+        contentContainerClassName={cn(
+          "pb-28 px-5 pt-5",
+          totalItems === 0 && "flex-grow",
+        )}
         ListHeaderComponent={() =>
           totalItems > 0 && (
             <View className="flex-between flex-row w-full pt-5 pb-10">
@@ -61,7 +95,46 @@ const Cart = () => {
             </View>
           )
         }
-        ListEmptyComponent={() => <Text>Your cart is empty</Text>}
+        ListEmptyComponent={() => (
+          <View className="flex-1 items-center justify-center px-4 pb-16">
+            <View className="size-36 rounded-full bg-primary/10 items-center justify-center mb-6">
+              <View className="size-24 rounded-full bg-white items-center justify-center shadow-md shadow-black/10">
+                <Image
+                  source={images.bag}
+                  className="size-12"
+                  resizeMode="contain"
+                  tintColor="#FE8C00"
+                />
+              </View>
+            </View>
+
+            <Image
+              source={images.emptyState}
+              className="w-64 h-44 mb-2"
+              resizeMode="contain"
+            />
+
+            <Text className="h2-bold text-dark-100 text-center mt-2">
+              Your cart is waiting
+            </Text>
+            <Text className="paragraph-medium text-gray-200 text-center mt-3 leading-6">
+              Add your favorite meals and they will show up here ready for
+              checkout.
+            </Text>
+
+            <CustomButton
+              title="Browse Menu"
+              style="bg-primary rounded-full py-4 px-8 mt-8 flex-row justify-center"
+              textStyle="text-white-100 paragraph-bold"
+              onPress={() =>
+                router.push({
+                  pathname: "/search",
+                  params: { category: "all", query: "" },
+                } as any)
+              }
+            />
+          </View>
+        )}
         ListFooterComponent={() =>
           totalItems > 0 && (
             <View className="gap-5">
@@ -87,7 +160,7 @@ const Cart = () => {
                   valueStyle="base-bold !text-dark-100 !text-right"
                 />
               </View>
-              <CustomButton title="Order Now" />
+              <CustomButton title="Order Now" onPress={handleCheckout} />
             </View>
           )
         }

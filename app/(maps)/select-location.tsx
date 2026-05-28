@@ -1,9 +1,8 @@
-import React, { useRef } from "react";
+import React, { useRef, useContext, useState } from "react";
 import {
   View,
   Text,
   ActivityIndicator,
-  Platform,
   StyleSheet,
   Dimensions,
   TouchableOpacity,
@@ -14,6 +13,7 @@ import { useLocationSetup } from "../../hooks/useLocationSetup";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
+import AppwriteContext from "../lib/services/auth_services/AppwirteContext";
 
 const { height } = Dimensions.get("window");
 
@@ -22,6 +22,7 @@ export default function SelectLocationScreen() {
   const {
     currentRegion,
     address,
+    setAddress,
     flatHouseNo,
     setFlatHouseNo,
     loading,
@@ -30,18 +31,56 @@ export default function SelectLocationScreen() {
     addressSuggestions,
     suggestionsLoading,
     searching,
+    currentLocationLoading,
     onRegionChangeComplete,
     searchAddress,
     selectAddressSuggestion,
     clearSearch,
+    locateCurrentPosition,
     zoomIn,
     zoomOut,
     confirmLocation,
   } = useLocationSetup();
   const router = useRouter();
 
-  const handleConfirm = () => {
+  const { user, setUser, appwrite } = useContext(AppwriteContext);
+
+  // States for Address type label and Mobile number
+  const [addressLabel, setAddressLabel] = useState<"Home" | "Work" | "Other">(
+    (user?.addressLabel as "Home" | "Work" | "Other") || "Home"
+  );
+  const [mobileNumber, setMobileNumber] = useState(user?.phoneNumber || "");
+
+  const handleConfirm = async () => {
     confirmLocation();
+
+    // Store in Appwrite database user table if user is logged in
+    if (user) {
+      const fullAddr = (flatHouseNo ? flatHouseNo.trim() + ", " : "") + (address || "");
+      try {
+        await appwrite.updateUserProfile({
+          userId: user.$id,
+          phoneNumber: mobileNumber.trim(),
+          address: fullAddr,
+          addressLabel: addressLabel,
+          latitude: currentRegion.latitude,
+          longitude: currentRegion.longitude,
+        });
+
+        // Update local React Context user state so Profile UI refreshes dynamically!
+        setUser({
+          ...user,
+          phoneNumber: mobileNumber.trim(),
+          address: fullAddr,
+          addressLabel: addressLabel,
+          latitude: currentRegion.latitude,
+          longitude: currentRegion.longitude,
+        });
+      } catch (err) {
+        console.error("Failed to save location details to Appwrite:", err);
+      }
+    }
+
     router.back();
   };
 
@@ -82,6 +121,7 @@ export default function SelectLocationScreen() {
               onSubmitEditing={() => searchAddress(searchQuery, mapRef)}
               returnKeyType="search"
               autoCorrect={false}
+              contextMenuHidden={true}
             />
             {searching ? (
               <ActivityIndicator
@@ -109,7 +149,7 @@ export default function SelectLocationScreen() {
             ) : (
               addressSuggestions.map((item) => (
                 <TouchableOpacity
-                  key={item.placeId}
+                  key={item.placeId ?? item.description}
                   style={styles.suggestionRow}
                   activeOpacity={0.75}
                   onPress={() => selectAddressSuggestion(item, mapRef)}
@@ -134,12 +174,25 @@ export default function SelectLocationScreen() {
       <MapView
         ref={mapRef}
         style={styles.map}
-        provider={Platform.OS === "android" ? PROVIDER_GOOGLE : undefined}
+        provider={PROVIDER_GOOGLE}
         initialRegion={currentRegion}
         onRegionChangeComplete={onRegionChangeComplete}
         showsUserLocation={true}
-        showsMyLocationButton={true}
+        showsMyLocationButton={false}
       />
+
+      <TouchableOpacity
+        style={styles.currentLocationButton}
+        onPress={() => locateCurrentPosition(mapRef)}
+        activeOpacity={0.85}
+        disabled={currentLocationLoading}
+      >
+        {currentLocationLoading ? (
+          <ActivityIndicator size="small" color="#1f2937" />
+        ) : (
+          <Ionicons name="locate" size={23} color="#1f2937" />
+        )}
+      </TouchableOpacity>
 
       {/* Zoom Controls */}
       <View style={styles.zoomControlsContainer}>
@@ -179,9 +232,15 @@ export default function SelectLocationScreen() {
             color="#f97316"
             style={{ marginTop: 2 }}
           />
-          <Text style={styles.addressText} numberOfLines={2}>
-            {address ? address : "Move the map to select a location..."}
-          </Text>
+          <TextInput
+            style={styles.addressInput}
+            value={address || ""}
+            onChangeText={setAddress}
+            multiline={true}
+            numberOfLines={2}
+            placeholder="Move the map or type address here..."
+            placeholderTextColor="#9ca3af"
+          />
         </View>
 
         <View style={styles.detailInputWrapper}>
@@ -192,8 +251,65 @@ export default function SelectLocationScreen() {
             placeholderTextColor="#9ca3af"
             value={flatHouseNo}
             onChangeText={setFlatHouseNo}
+            returnKeyType="next"
+          />
+        </View>
+
+        {/* Mobile Number Input */}
+        <View style={styles.detailInputWrapper}>
+          <Ionicons name="call-outline" size={18} color="#f97316" />
+          <TextInput
+            style={styles.detailInput}
+            placeholder="Mobile number"
+            placeholderTextColor="#9ca3af"
+            value={mobileNumber}
+            onChangeText={setMobileNumber}
+            keyboardType="phone-pad"
             returnKeyType="done"
           />
+        </View>
+
+        {/* Address Category Chip UI */}
+        <Text style={styles.sectionLabel}>Save Address As</Text>
+        <View style={styles.chipsRow}>
+          <TouchableOpacity
+            style={[styles.chip, addressLabel === "Home" && styles.activeChip]}
+            onPress={() => setAddressLabel("Home")}
+            activeOpacity={0.8}
+          >
+            <Ionicons
+              name={addressLabel === "Home" ? "home" : "home-outline"}
+              size={16}
+              color={addressLabel === "Home" ? "#fff" : "#f97316"}
+            />
+            <Text style={[styles.chipText, addressLabel === "Home" && styles.activeChipText]}>Home</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.chip, addressLabel === "Work" && styles.activeChip]}
+            onPress={() => setAddressLabel("Work")}
+            activeOpacity={0.8}
+          >
+            <Ionicons
+              name={addressLabel === "Work" ? "briefcase" : "briefcase-outline"}
+              size={16}
+              color={addressLabel === "Work" ? "#fff" : "#f97316"}
+            />
+            <Text style={[styles.chipText, addressLabel === "Work" && styles.activeChipText]}>Work</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.chip, addressLabel === "Other" && styles.activeChip]}
+            onPress={() => setAddressLabel("Other")}
+            activeOpacity={0.8}
+          >
+            <Ionicons
+              name={addressLabel === "Other" ? "location" : "location-outline"}
+              size={16}
+              color={addressLabel === "Other" ? "#fff" : "#f97316"}
+            />
+            <Text style={[styles.chipText, addressLabel === "Other" && styles.activeChipText]}>Other</Text>
+          </TouchableOpacity>
         </View>
 
         <TouchableOpacity
@@ -300,6 +416,23 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 6,
     elevation: 4,
+  },
+  currentLocationButton: {
+    position: "absolute",
+    right: 16,
+    top: 96,
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: "#fff",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 4,
+    zIndex: 10,
   },
   suggestionRow: {
     minHeight: 58,
@@ -409,6 +542,16 @@ const styles = StyleSheet.create({
     color: "#6b7280",
     lineHeight: 22,
   },
+  addressInput: {
+    flex: 1,
+    fontSize: 15,
+    fontFamily: "Quicksand-Regular",
+    color: "#6b7280",
+    padding: 0,
+    margin: 0,
+    textAlignVertical: "top",
+    minHeight: 44,
+  },
   detailInputWrapper: {
     minHeight: 50,
     borderWidth: 1,
@@ -446,5 +589,40 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 17,
     fontFamily: "Quicksand-Bold",
+  },
+  sectionLabel: {
+    fontSize: 13,
+    fontFamily: "Quicksand-Bold",
+    color: "#6b7280",
+    marginBottom: 8,
+    marginTop: 4,
+  },
+  chipsRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 18,
+  },
+  chip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  activeChip: {
+    backgroundColor: "#f97316",
+    borderColor: "#f97316",
+  },
+  chipText: {
+    fontSize: 13,
+    fontFamily: "Quicksand-Bold",
+    color: "#4b5563",
+  },
+  activeChipText: {
+    color: "#fff",
   },
 });

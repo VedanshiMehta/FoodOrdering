@@ -2,12 +2,14 @@ import CartContext from "@/app/lib/services/cart_services/CartContext";
 import { MenuItem } from "@/type";
 import React, { useContext } from "react";
 import { Image, Platform, Text, TouchableOpacity } from "react-native";
+import { useRouter } from "expo-router";
 
 const MenuCard = ({
   item: { $id, image_url, name, price },
 }: {
   item: MenuItem;
 }) => {
+  const router = useRouter();
   const { addItem } = useContext(CartContext);
   return (
     <TouchableOpacity
@@ -17,6 +19,7 @@ const MenuCard = ({
           ? { elevation: 10, shadowColor: "#878787" }
           : {}
       }
+      onPress={() => router.push(`/(details)/${$id}` as any)}
     >
       <Image
         source={{ uri: image_url }}

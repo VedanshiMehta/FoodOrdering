@@ -9,12 +9,44 @@ const GOOGLE_MAPS_API_KEY = "AIzaSyALqzmxQp3LvPfDzW-BkEqIvpVRjLG-fjc";
 const DEFAULT_SEARCH_CITY = "Valsad";
 const DEFAULT_SEARCH_STATE = "Gujarat";
 const DEFAULT_SEARCH_COUNTRY = "India";
+const DEFAULT_REGION = {
+  latitude: 20.5992,
+  longitude: 72.9342,
+  latitudeDelta: 0.0012,
+  longitudeDelta: 0.0012,
+};
+
+const fetchWithTimeout = async (url: string, timeoutMs = 5000) => {
+  const controller = new AbortController();
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  const timeoutPromise = new Promise<any>((resolve) => {
+    timeoutId = setTimeout(() => {
+      controller.abort();
+      resolve({ status: "TIMEOUT", results: [], predictions: [] });
+    }, timeoutMs);
+  });
+
+  const requestPromise = (async () => {
+    try {
+      const response = await fetch(url, { signal: controller.signal });
+      return await response.json();
+    } catch (error) {
+      return { status: "ERROR", results: [], predictions: [] };
+    } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    }
+  })();
+
+  return Promise.race([requestPromise, timeoutPromise]);
+};
 
 const geocodeWithGoogle = async (query: string) => {
   try {
     const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query)}&region=in&components=country:IN&key=${GOOGLE_MAPS_API_KEY}`;
-    const response = await fetch(url);
-    const data = await response.json();
+    const data = await fetchWithTimeout(url);
     if (data.status === "OK" && data.results && data.results.length > 0) {
       const result = data.results[0];
       return {
@@ -37,8 +69,7 @@ const geocodeWithGoogle = async (query: string) => {
 const searchPlaceWithGoogle = async (query: string) => {
   try {
     const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&region=in&key=${GOOGLE_MAPS_API_KEY}`;
-    const response = await fetch(url);
-    const data = await response.json();
+    const data = await fetchWithTimeout(url);
 
     if (data.status === "OK" && data.results && data.results.length > 0) {
       const result = data.results[0];
@@ -60,6 +91,74 @@ const searchPlaceWithGoogle = async (query: string) => {
   return null;
 };
 
+const searchPlaceSuggestionsWithGoogle = async (query: string) => {
+  try {
+    const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&region=in&key=${GOOGLE_MAPS_API_KEY}`;
+    const data = await fetchWithTimeout(url, 2500);
+
+    if (data.status === "OK" && data.results && data.results.length > 0) {
+      return data.results.slice(0, 5).map((result: any) => ({
+        placeId: result.place_id,
+        primaryText: result.name || result.formatted_address,
+        secondaryText: result.formatted_address || result.vicinity || "",
+        description:
+          result.formatted_address ||
+          [result.name, result.vicinity].filter(Boolean).join(", "),
+        latitude: result.geometry.location.lat,
+        longitude: result.geometry.location.lng,
+        formattedAddress:
+          result.formatted_address ||
+          [result.name, result.vicinity].filter(Boolean).join(", "),
+      }));
+    }
+
+    if (data.status && data.status !== "ZERO_RESULTS") {
+      console.log(
+        "Google Text Search status:",
+        data.status,
+        data.error_message,
+      );
+    }
+  } catch (error) {
+    console.error("Google Text Search error:", error);
+  }
+
+  return [];
+};
+
+const fetchAutocompleteSuggestions = async (query: string) => {
+  try {
+    const url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(query)}&components=country:in&region=in&key=${GOOGLE_MAPS_API_KEY}`;
+    const data = await fetchWithTimeout(url, 2500);
+
+    if (
+      data.status === "OK" &&
+      data.predictions &&
+      data.predictions.length > 0
+    ) {
+      return data.predictions.slice(0, 5).map((prediction: any) => ({
+        placeId: prediction.place_id,
+        primaryText:
+          prediction.structured_formatting?.main_text || prediction.description,
+        secondaryText: prediction.structured_formatting?.secondary_text || "",
+        description: prediction.description,
+      }));
+    }
+
+    if (data.status && data.status !== "ZERO_RESULTS") {
+      console.log(
+        "Google Autocomplete status:",
+        data.status,
+        data.error_message,
+      );
+    }
+  } catch (error) {
+    console.error("Google Autocomplete error:", error);
+  }
+
+  return [];
+};
+
 type GoogleLocationResult = {
   latitude: number;
   longitude: number;
@@ -68,10 +167,13 @@ type GoogleLocationResult = {
 };
 
 export type AddressSuggestion = {
-  placeId: string;
+  placeId?: string;
   primaryText: string;
   secondaryText: string;
   description: string;
+  latitude?: number;
+  longitude?: number;
+  formattedAddress?: string;
 };
 
 const fetchAddressSuggestions = async (query: string) => {
@@ -80,37 +182,40 @@ const fetchAddressSuggestions = async (query: string) => {
 
   const queries = buildSearchQueries(normalizedQuery);
 
-  for (const searchQuery of queries) {
-    try {
-      const url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(searchQuery)}&types=geocode&components=country:in&region=in&key=${GOOGLE_MAPS_API_KEY}`;
-      const response = await fetch(url);
-      const data = await response.json();
+  const autocompleteResults = await Promise.all(
+    queries.map(fetchAutocompleteSuggestions),
+  );
+  const autocompleteSuggestions = autocompleteResults.find(
+    (suggestions) => suggestions.length > 0,
+  );
+  if (autocompleteSuggestions) return autocompleteSuggestions;
 
-      if (
-        data.status === "OK" &&
-        data.predictions &&
-        data.predictions.length > 0
-      ) {
-        return data.predictions.slice(0, 5).map((prediction: any) => ({
-          placeId: prediction.place_id,
-          primaryText:
-            prediction.structured_formatting?.main_text ||
-            prediction.description,
-          secondaryText: prediction.structured_formatting?.secondary_text || "",
-          description: prediction.description,
-        }));
-      }
+  const textSearchResults = await Promise.all(
+    queries.map(searchPlaceSuggestionsWithGoogle),
+  );
+  const textSearchSuggestions = textSearchResults.find(
+    (suggestions) => suggestions.length > 0,
+  );
+  if (textSearchSuggestions) return textSearchSuggestions;
 
-      if (data.status && data.status !== "ZERO_RESULTS") {
-        console.log(
-          "Google Autocomplete status:",
-          data.status,
-          data.error_message,
-        );
-      }
-    } catch (error) {
-      console.error("Google Autocomplete error:", error);
-    }
+  const geocodeResults = await Promise.all(
+    queries.map((searchQuery) => geocodeWithGoogle(searchQuery)),
+  );
+  const geocodeResult = geocodeResults.find(Boolean);
+
+  if (geocodeResult) {
+    const result = geocodeResult as GoogleLocationResult;
+
+    return [
+      {
+        primaryText: normalizedQuery,
+        secondaryText: result.formattedAddress,
+        description: result.formattedAddress,
+        latitude: result.latitude,
+        longitude: result.longitude,
+        formattedAddress: result.formattedAddress,
+      },
+    ];
   }
 
   return [];
@@ -119,8 +224,7 @@ const fetchAddressSuggestions = async (query: string) => {
 const getPlaceDetails = async (placeId: string) => {
   try {
     const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${encodeURIComponent(placeId)}&fields=geometry,formatted_address,name,vicinity&key=${GOOGLE_MAPS_API_KEY}`;
-    const response = await fetch(url);
-    const data = await response.json();
+    const data = await fetchWithTimeout(url);
 
     if (data.status === "OK" && data.result?.geometry?.location) {
       const result = data.result;
@@ -174,8 +278,7 @@ const reverseGeocodeWithGoogle = async (
 ) => {
   try {
     const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${GOOGLE_MAPS_API_KEY}`;
-    const response = await fetch(url);
-    const data = await response.json();
+    const data = await fetchWithTimeout(url);
     if (data.status === "OK" && data.results && data.results.length > 0) {
       return data.results[0].formatted_address;
     }
@@ -185,15 +288,89 @@ const reverseGeocodeWithGoogle = async (
   return null;
 };
 
+const reverseGeocodeWithNative = async (
+  latitude: number,
+  longitude: number,
+) => {
+  const geocode = await Location.reverseGeocodeAsync({
+    latitude,
+    longitude,
+  });
+
+  if (geocode.length === 0) return null;
+
+  const place = geocode[0];
+  return [
+    place.name,
+    place.street,
+    place.district,
+    place.city,
+    place.region,
+    place.postalCode,
+  ]
+    .filter(Boolean)
+    .join(", ");
+};
+
+const getAddressFromCoordinates = async (
+  latitude: number,
+  longitude: number,
+) => {
+  const googleAddress = await reverseGeocodeWithGoogle(latitude, longitude);
+  if (googleAddress) return googleAddress;
+
+  return reverseGeocodeWithNative(latitude, longitude);
+};
+
+const getCoordinatesForAddress = async (query: string) => {
+  const normalizedQuery = query.trim();
+  if (!normalizedQuery) return null;
+
+  const searchQueries = buildSearchQueries(normalizedQuery);
+
+  for (const searchQuery of searchQueries) {
+    const placeResult = await searchPlaceWithGoogle(searchQuery);
+    if (placeResult) return placeResult;
+  }
+
+  for (const searchQuery of searchQueries) {
+    const geocodeResult = await geocodeWithGoogle(searchQuery);
+    if (geocodeResult) return geocodeResult;
+  }
+
+  return null;
+};
+
+const getDistanceInMeters = (
+  first: { latitude: number; longitude: number },
+  second: { latitude: number; longitude: number },
+) => {
+  const earthRadius = 6371000;
+  const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
+  const dLat = toRadians(second.latitude - first.latitude);
+  const dLng = toRadians(second.longitude - first.longitude);
+  const lat1 = toRadians(first.latitude);
+  const lat2 = toRadians(second.latitude);
+
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1) *
+      Math.cos(lat2) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
+
+  return earthRadius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+
 export const useLocationSetup = () => {
   const dispatch = useDispatch();
   const savedLocation = useSelector((state: RootState) => state.location);
 
   const [currentRegion, setCurrentRegion] = useState({
-    latitude: savedLocation.latitude || 37.78825,
-    longitude: savedLocation.longitude || -122.4324,
-    latitudeDelta: 0.005,
-    longitudeDelta: 0.005,
+    latitude: savedLocation.latitude || DEFAULT_REGION.latitude,
+    longitude: savedLocation.longitude || DEFAULT_REGION.longitude,
+    latitudeDelta: DEFAULT_REGION.latitudeDelta,
+    longitudeDelta: DEFAULT_REGION.longitudeDelta,
   });
   const [address, setAddress] = useState<string | null>(savedLocation.address);
   const [flatHouseNo, setFlatHouseNo] = useState(
@@ -202,6 +379,7 @@ export const useLocationSetup = () => {
   const [loading, setLoading] = useState(!savedLocation.latitude);
   const [searchQuery, setSearchQuery] = useState("");
   const [searching, setSearching] = useState(false);
+  const [currentLocationLoading, setCurrentLocationLoading] = useState(false);
   const [addressSuggestions, setAddressSuggestions] = useState<
     AddressSuggestion[]
   >([]);
@@ -253,7 +431,7 @@ export const useLocationSetup = () => {
 
     programmaticMoveTimeout.current = setTimeout(() => {
       isProgrammaticMove.current = false;
-    }, 1200);
+    }, 1800);
   };
 
   useEffect(() => {
@@ -267,21 +445,55 @@ export const useLocationSetup = () => {
 
       if (!savedLocation.latitude || !savedLocation.longitude) {
         try {
-          let location = await Location.getCurrentPositionAsync({});
+          const location =
+            (await Location.getLastKnownPositionAsync()) ??
+            (await Location.getCurrentPositionAsync({
+              accuracy: Location.Accuracy.Balanced,
+            }));
           const newRegion = {
             latitude: location.coords.latitude,
             longitude: location.coords.longitude,
-            latitudeDelta: 0.005,
-            longitudeDelta: 0.005,
+            latitudeDelta: 0.0012,
+            longitudeDelta: 0.0012,
           };
           setCurrentRegion(newRegion);
           await reverseGeocode(newRegion.latitude, newRegion.longitude);
         } catch (error) {
-          console.error("Error fetching location:", error);
+          setCurrentRegion(DEFAULT_REGION);
+          setAddress(
+            `${DEFAULT_SEARCH_CITY}, ${DEFAULT_SEARCH_STATE}, ${DEFAULT_SEARCH_COUNTRY}`,
+          );
         } finally {
           setLoading(false);
         }
       } else {
+        if (savedLocation.address) {
+          const resolvedLocation = await getCoordinatesForAddress(
+            savedLocation.address,
+          );
+
+          if (resolvedLocation) {
+            const savedRegion = {
+              latitude: savedLocation.latitude,
+              longitude: savedLocation.longitude,
+            };
+            const resolvedRegion = {
+              latitude: resolvedLocation.latitude,
+              longitude: resolvedLocation.longitude,
+            };
+            const distance = getDistanceInMeters(savedRegion, resolvedRegion);
+
+            if (distance > 75) {
+              setCurrentRegion({
+                ...resolvedRegion,
+                latitudeDelta: 0.0012,
+                longitudeDelta: 0.0012,
+              });
+              setAddress(resolvedLocation.formattedAddress);
+            }
+          }
+        }
+
         setLoading(false);
       }
     })();
@@ -289,21 +501,11 @@ export const useLocationSetup = () => {
 
   const reverseGeocode = async (latitude: number, longitude: number) => {
     try {
-      // 1. Try Google Reverse Geocoding first for high precision
-      const googleAddress = await reverseGeocodeWithGoogle(latitude, longitude);
-      if (googleAddress) {
-        setAddress(googleAddress);
-        return;
-      }
-
-      // 2. Fallback to native reverse geocoding
-      const geocode = await Location.reverseGeocodeAsync({
+      const formattedAddress = await getAddressFromCoordinates(
         latitude,
         longitude,
-      });
-      if (geocode.length > 0) {
-        const place = geocode[0];
-        const formattedAddress = `${place.name ? place.name + ", " : ""}${place.street ? place.street + ", " : ""}${place.city ? place.city : ""}`;
+      );
+      if (formattedAddress) {
         setAddress(formattedAddress);
       }
     } catch (error) {
@@ -348,8 +550,8 @@ export const useLocationSetup = () => {
         const newRegion = {
           latitude,
           longitude,
-          latitudeDelta: 0.002,
-          longitudeDelta: 0.002,
+          latitudeDelta: 0.0012,
+          longitudeDelta: 0.0012,
         };
 
         moveToSearchedLocation(newRegion, formattedAddress, mapRef);
@@ -381,8 +583,8 @@ export const useLocationSetup = () => {
         const newRegion = {
           latitude,
           longitude,
-          latitudeDelta: 0.002,
-          longitudeDelta: 0.002,
+          latitudeDelta: 0.0012,
+          longitudeDelta: 0.0012,
         };
 
         moveToSearchedLocation(newRegion, formattedAddress, mapRef);
@@ -399,8 +601,8 @@ export const useLocationSetup = () => {
         const newRegion = {
           latitude,
           longitude,
-          latitudeDelta: 0.005,
-          longitudeDelta: 0.005,
+          latitudeDelta: 0.0012,
+          longitudeDelta: 0.0012,
         };
 
         moveToSearchedLocation(newRegion, searchQuery, mapRef);
@@ -432,6 +634,30 @@ export const useLocationSetup = () => {
     setSearching(true);
 
     try {
+      if (
+        typeof suggestion.latitude === "number" &&
+        typeof suggestion.longitude === "number"
+      ) {
+        const newRegion = {
+          latitude: suggestion.latitude,
+          longitude: suggestion.longitude,
+          latitudeDelta: 0.001,
+          longitudeDelta: 0.001,
+        };
+
+        moveToSearchedLocation(
+          newRegion,
+          suggestion.formattedAddress || suggestion.description,
+          mapRef,
+        );
+        return;
+      }
+
+      if (!suggestion.placeId) {
+        await searchAddress(suggestion.description, mapRef);
+        return;
+      }
+
       const placeDetails = await getPlaceDetails(suggestion.placeId);
       if (!placeDetails) {
         await searchAddress(suggestion.description, mapRef);
@@ -460,6 +686,46 @@ export const useLocationSetup = () => {
     setSearchQuery("");
     setAddressSuggestions([]);
     setSuggestionsLoading(false);
+  };
+
+  const locateCurrentPosition = async (mapRef: any) => {
+    setCurrentLocationLoading(true);
+
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission Required", "Please allow location permission.");
+        return;
+      }
+
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+
+      const newRegion = {
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+        latitudeDelta: 0.0012,
+        longitudeDelta: 0.0012,
+      };
+      const formattedAddress =
+        (await getAddressFromCoordinates(
+          newRegion.latitude,
+          newRegion.longitude,
+        )) || "Current location";
+
+      setSearchQuery("");
+      setAddressSuggestions([]);
+      moveToSearchedLocation(newRegion, formattedAddress, mapRef);
+    } catch (error) {
+      console.error("Error fetching current location:", error);
+      Alert.alert(
+        "Location Unavailable",
+        "Could not get your current location. Please check location services.",
+      );
+    } finally {
+      setCurrentLocationLoading(false);
+    }
   };
 
   const zoomIn = (mapRef: any) => {
@@ -510,6 +776,7 @@ export const useLocationSetup = () => {
   return {
     currentRegion,
     address,
+    setAddress,
     flatHouseNo,
     setFlatHouseNo,
     loading,
@@ -518,10 +785,12 @@ export const useLocationSetup = () => {
     addressSuggestions,
     suggestionsLoading,
     searching,
+    currentLocationLoading,
     onRegionChangeComplete,
     searchAddress,
     selectAddressSuggestion,
     clearSearch,
+    locateCurrentPosition,
     zoomIn,
     zoomOut,
     confirmLocation,

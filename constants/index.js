@@ -40,6 +40,15 @@ import pizzaOne from "@/assets/images/pizza-one.png";
 import salad from "@/assets/images/salad.png";
 import success from "@/assets/images/success.png";
 import tomatoes from "@/assets/images/tomatoes.png";
+import coke from "@/assets/images/coke.png";
+import jalapeno from "@/assets/images/jalapeno.png";
+import olives from "@/assets/images/olives.png";
+import garlicBread from "@/assets/images/garlic-bread.png";
+import chickenNuggets from "@/assets/images/chicken-nuggets.png";
+import icedTea from "@/assets/images/iced-tea.png";
+import potatoWedges from "@/assets/images/potato-wedges.png";
+import sweetCorn from "@/assets/images/sweet-corn.png";
+import chocoLavaCake from "@/assets/images/choco-lava-cake.png";
 
 export const CATEGORIES = [
   {
@@ -105,7 +114,7 @@ export const sides = [
   {
     name: "Mozarella Sticks",
     image: mozarellaSticks,
-    price: 5.0,
+    price: 4.5,
   },
   {
     name: "Coleslaw",
@@ -115,7 +124,42 @@ export const sides = [
   {
     name: "Salad",
     image: salad,
-    price: 4.5,
+    price: 3.3,
+  },
+  {
+    name: "Coke",
+    image: coke,
+    price: 3.0,
+  },
+  {
+    name: "Garlic Bread",
+    image: garlicBread,
+    price: 4.0,
+  },
+  {
+    name: "Chicken Nuggets",
+    image: chickenNuggets,
+    price: 5.0,
+  },
+  {
+    name: "Iced Tea",
+    image: icedTea,
+    price: 2.8,
+  },
+  {
+    name: "Potato Wedges",
+    image: potatoWedges,
+    price: 3.8,
+  },
+  {
+    name: "Sweet Corn",
+    image: sweetCorn,
+    price: 2.5,
+  },
+  {
+    name: "Choco Lava Cake",
+    image: chocoLavaCake,
+    price: 4.2,
   },
 ];
 
@@ -123,17 +167,22 @@ export const toppings = [
   {
     name: "Avocado",
     image: avocado,
-    price: 1.5,
+    price: 3.5,
   },
   {
     name: "Bacon",
     image: bacon,
-    price: 2.0,
+    price: 3.0,
   },
   {
     name: "Cheese",
     image: cheese,
-    price: 1.0,
+    price: 2.5,
+  },
+  {
+    name: "Extra Cheese",
+    image: cheese,
+    price: 2.5,
   },
   {
     name: "Cucumber",
@@ -143,17 +192,27 @@ export const toppings = [
   {
     name: "Mushrooms",
     image: mushrooms,
-    price: 1.2,
+    price: 1.8,
   },
   {
     name: "Onions",
     image: onions,
-    price: 0.5,
+    price: 1.0,
   },
   {
     name: "Tomatoes",
     image: tomatoes,
-    price: 0.7,
+    price: 1.0,
+  },
+  {
+    name: "Jalapeños",
+    image: jalapeno,
+    price: 2.0,
+  },
+  {
+    name: "Olives",
+    image: olives,
+    price: 1.5,
   },
 ];
 
@@ -199,4 +258,13 @@ export const images = {
   star,
   trash,
   user,
+  coke,
+  jalapeno,
+  olives,
+  garlicBread,
+  chickenNuggets,
+  icedTea,
+  potatoWedges,
+  sweetCorn,
+  chocoLavaCake,
 };

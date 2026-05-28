@@ -15,14 +15,48 @@ import AppwriteContext from "../lib/services/auth_services/AppwirteContext";
 import { useSelector } from "react-redux";
 import { RootState } from "../../store/store";
 import { useRouter } from "expo-router";
+import useAppwrite from "../lib/services/appwrite_data_services/useApprwriteData";
 
 export default function Index() {
-  const { user } = useContext(AppwriteContext);
+  const { user, appwrite } = useContext(AppwriteContext);
   const { address, flatHouseNo } = useSelector(
     (state: RootState) => state.location,
   );
   const router = useRouter();
   const deliveryAddress = flatHouseNo || address?.split(",")[0];
+
+  const { data: categories } = useAppwrite({
+    fn: () => appwrite.getCategories(),
+  });
+
+  const handleOfferPress = (title: string) => {
+    let targetName = "";
+    const upperTitle = title.toUpperCase();
+    if (upperTitle.includes("COMBO") || upperTitle.includes("BURGER")) {
+      targetName = "Burgers";
+    } else if (upperTitle.includes("PIZZA")) {
+      targetName = "Pizzas";
+    } else if (upperTitle.includes("BURRITO")) {
+      targetName = "Burritos";
+    }
+
+    const matchedCategory = categories?.find(
+      (cat: any) => cat.name.toLowerCase() === targetName.toLowerCase()
+    );
+
+    if (matchedCategory) {
+      router.push({
+        pathname: "/search",
+        params: { category: matchedCategory.$id },
+      });
+    } else {
+      router.push({
+        pathname: "/search",
+        params: { category: "all" },
+      });
+    }
+  };
+
   return (
     <SafeAreaView className="flex-1 bg-white">
       <FlatList
@@ -38,6 +72,7 @@ export default function Index() {
                 )}
                 style={{ backgroundColor: item.color }}
                 android_ripple={{ color: "#ffffff22" }}
+                onPress={() => handleOfferPress(item.title)}
               >
                 {({ pressed }) => (
                   <Fragment>

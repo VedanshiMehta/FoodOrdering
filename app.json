@@ -12,6 +12,11 @@
       "bundleIdentifier": "com.anonymous.FoodDelivery",
       "config": {
         "googleMapsApiKey": "AIzaSyALqzmxQp3LvPfDzW-BkEqIvpVRjLG-fjc"
+      },
+      "infoPlist": {
+        "NSCameraUsageDescription": "Allow FoodDelivery to access your camera to take a profile photo.",
+        "NSPhotoLibraryUsageDescription": "Allow FoodDelivery to access your photos to select a profile picture.",
+        "NSPhotoLibraryAddUsageDescription": "Allow FoodDelivery to save profile photos to your library."
       }
     },
     "android": {
@@ -24,7 +29,13 @@
         "googleMaps": {
           "apiKey": "AIzaSyALqzmxQp3LvPfDzW-BkEqIvpVRjLG-fjc"
         }
-      }
+      },
+      "permissions": [
+        "CAMERA",
+        "READ_MEDIA_IMAGES",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -37,6 +48,13 @@
         "expo-location",
         {
           "locationAlwaysAndWhenInUsePermission": "Allow FoodDelivery to use your location."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow FoodDelivery to access your photos to select a profile picture.",
+          "cameraPermission": "Allow FoodDelivery to access your camera to take a profile photo."
         }
       ],
       [

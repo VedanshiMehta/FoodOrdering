@@ -18,12 +18,15 @@ const Search = () => {
     query: string;
     category: string;
   }>();
+  const selectedCategory = category && category !== "all" ? category : undefined;
+  const searchQuery = query?.trim() || undefined;
+
   // fetch Menu Items
   const { data, refetch, loading } = useAppwrite({
     fn: appwrite.getMenu,
     params: {
-      category,
-      query,
+      category: selectedCategory,
+      query: searchQuery,
       limit: 6,
     },
   });
@@ -32,8 +35,8 @@ const Search = () => {
     fn: () => appwrite.getCategories(),
   });
   useEffect(() => {
-    refetch({ category, query, limit: 6 });
-  }, [category, query]);
+    refetch({ category: selectedCategory, query: searchQuery, limit: 6 });
+  }, [selectedCategory, searchQuery]);
 
   return (
     <SafeAreaView className="bg-white h-full">

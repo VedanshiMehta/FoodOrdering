@@ -28,7 +28,6 @@ export const AppwriteProvider: FC<PropsWithChildren> = ({ children }) => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const appwriteInstance = useMemo(() => new Appwrite(), []);
-  console.log(isLoggedIn);
 
   const contextValue = useMemo(() => {
     return {

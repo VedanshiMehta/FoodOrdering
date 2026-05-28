@@ -1,12 +1,17 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { TextInput, TouchableOpacity, View } from "react-native";
 import { useDebouncedCallback } from "use-debounce";
 
 const SearchBar = () => {
   const params = useLocalSearchParams<{ query?: string }>();
   const [query, setQuery] = useState(params.query ?? "");
+
+  useEffect(() => {
+    setQuery(params.query ?? "");
+  }, [params.query]);
+
   const debouncedSearch = useDebouncedCallback((text: string) => {
     router.setParams({ query: text || undefined });
   }, 500);
