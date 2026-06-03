@@ -8,6 +8,7 @@ import { CartProvider } from "./lib/services/cart_services/CartContext";
 import { Provider } from "react-redux";
 import { store } from "../store/store";
 import { StripeProvider } from "@stripe/stripe-react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 const STRIPE_PUBLISHABLE_KEY = "pk_test_51TbvAwBKPaQBNlXoDVFJX49IMGeuduFHr1gAyAS10y4h3Knx90XJfbrgg5j4LvGqDEzlkBoly1EECyab6J24u5qB00snfGzqDM";
 
@@ -23,16 +24,17 @@ export default function RootLayout() {
     if (error) throw error;
     if (fontsLoaded) SplashScreen.hideAsync();
   }, [fontsLoaded, error]);
-
   return (
-    <Provider store={store}>
-      <StripeProvider publishableKey={STRIPE_PUBLISHABLE_KEY}>
-        <AppwriteProvider>
-          <CartProvider>
-            <Stack screenOptions={{ headerShown: false }} />
-          </CartProvider>
-        </AppwriteProvider>
-      </StripeProvider>
-    </Provider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <Provider store={store}>
+        <StripeProvider publishableKey={STRIPE_PUBLISHABLE_KEY}>
+          <AppwriteProvider>
+            <CartProvider>
+              <Stack screenOptions={{ headerShown: false }} />
+            </CartProvider>
+          </AppwriteProvider>
+        </StripeProvider>
+      </Provider>
+    </GestureHandlerRootView>
   );
 }

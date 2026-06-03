@@ -9,7 +9,9 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Alert,
 } from "react-native";
+import { Swipeable } from "react-native-gesture-handler";
 import { SafeAreaView } from "react-native-safe-area-context";
 import AppwriteContext from "../lib/services/auth_services/AppwirteContext";
 import useAppwrite from "../lib/services/appwrite_data_services/useApprwriteData";
@@ -57,6 +59,29 @@ export default function MyMenuScreen() {
       return item.userId === user?.$id || (!item.userId && !item.name.toLowerCase().includes("domino"));
     }
   }) || [];
+
+  const handleDeleteFood = (itemId: string, itemName: string) => {
+    Alert.alert(
+      "Delete Menu Item",
+      `Are you sure you want to delete "${itemName}"? This cannot be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            const success = await appwrite.deleteMenu(itemId);
+            if (success !== false) {
+              refetchMenu({ category: selectedCategory === "all" ? undefined : selectedCategory });
+              Alert.alert("Deleted", `"${itemName}" has been removed from your menu.`);
+            } else {
+              Alert.alert("Error", "Failed to delete item.");
+            }
+          },
+        },
+      ]
+    );
+  };
 
   // Filter categories dynamically based on manager's actual active dishes
   const activeCategoryIds = new Set(
@@ -153,20 +178,21 @@ export default function MyMenuScreen() {
                 className={`flex-1 max-w-[48%] ${!isLeftCol ? "mt-10" : "mt-0"}`}
               >
                 <View
-                  className="menu-card w-full"
+                  className="menu-card w-full relative"
                   style={
                     Platform.OS === "android"
                       ? { elevation: 10, shadowColor: "#878787" }
                       : {}
                   }
                 >
-                  <View className="size-32 absolute -top-10 rounded-full overflow-hidden">
+                  <View className="size-32 absolute -top-10 rounded-full overflow-hidden self-center">
                     <Image
                       source={{ uri: item.image_url }}
                       className="w-full h-full rounded-full overflow-hidden"
                       resizeMode="cover"
                     />
                   </View>
+
                   <Text
                     className="text-center base-bold text-dark-100 mb-2"
                     numberOfLines={1}
@@ -176,20 +202,39 @@ export default function MyMenuScreen() {
                   </Text>
                   
                   <Text
-                    className="body-regular text-gray-200 mb-4"
+                    className="body-regular text-gray-200 mb-4 text-center"
                     style={{ fontFamily: "Quicksand-Medium" }}
                   >
                     From ${item.price.toFixed(2)}
                   </Text>
 
-                  <TouchableOpacity onPress={() => router.push(`/hotel/add?edit=${item.$id}` as any)}>
-                    <Text
-                      className="paragraph-bold text-primary"
-                      style={{ fontFamily: "Quicksand-Bold" }}
+                  <View className="flex-col gap-2.5 mt-auto self-center w-11/12 -mb-1">
+                    <TouchableOpacity 
+                      onPress={() => router.push(`/hotel/add?editId=${item.$id}` as any)}
+                      className="flex-row items-center justify-center border border-orange-200 rounded-full py-2 w-full"
                     >
-                      Manage Listing
-                    </Text>
-                  </TouchableOpacity>
+                      <Ionicons name="pencil" size={14} color="#f97316" />
+                      <Text
+                        className="text-xs text-orange-500 ml-1.5"
+                        style={{ fontFamily: "Quicksand-Bold" }}
+                      >
+                        Edit
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity 
+                      onPress={() => handleDeleteFood(item.$id, item.name)}
+                      className="flex-row items-center justify-center border border-red-200 rounded-full py-2 w-full"
+                    >
+                      <Ionicons name="trash" size={14} color="#ef4444" />
+                      <Text
+                        className="text-xs text-red-500 ml-1.5"
+                        style={{ fontFamily: "Quicksand-Bold" }}
+                      >
+                        Delete
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               </View>
             );

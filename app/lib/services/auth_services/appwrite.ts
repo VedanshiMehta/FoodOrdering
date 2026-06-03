@@ -425,6 +425,19 @@ class AppwriteService {
     }
   };
 
+  deleteMenu = async (itemId: string) => {
+    try {
+      return await this.database.deleteRow({
+        databaseId: APPWRITE_DATABASE_ID,
+        tableId: MENU_COLLECTION_ID,
+        rowId: itemId,
+      });
+    } catch (error) {
+      console.log("Appwrite service :: deleteMenu() :: " + error);
+      return false;
+    }
+  };
+
   getCategories = async () => {
     const categories = await this.database.listRows({
       databaseId: APPWRITE_DATABASE_ID,

@@ -53,6 +53,7 @@ export default function AddFoodScreen() {
     handlePublishFood,
     handleCreateCategory,
     handleCreateCustomization,
+    isEditMode,
   } = useAddFoodForm();
 
   // Bottom Sheets Visibility
@@ -172,10 +173,10 @@ export default function AddFoodScreen() {
       <View className="flex-row items-center justify-between px-6 py-5 bg-gray-50">
         <View>
           <Text className="text-2xl font-bold text-gray-900" style={{ fontFamily: "Quicksand-Bold" }}>
-            Add Menu Listing
+            {isEditMode ? "Edit Menu Listing" : "Add Menu Listing"}
           </Text>
           <Text className="text-xs text-gray-400 mt-1" style={{ fontFamily: "Quicksand-Medium" }}>
-            Create a new delicious dish for your catalog
+            {isEditMode ? "Update details for an existing dish" : "Create a new delicious dish for your catalog"}
           </Text>
         </View>
       </View>
@@ -193,10 +194,10 @@ export default function AddFoodScreen() {
               </View>
               <View>
                 <Text className="text-base font-bold text-gray-800" style={{ fontFamily: "Quicksand-Bold" }}>
-                  Create Menu Item
+                  {isEditMode ? "Update Menu Item" : "Create Menu Item"}
                 </Text>
                 <Text className="text-[11px] text-gray-400" style={{ fontFamily: "Quicksand-Medium" }}>
-                  List a new meal on the customer catalog
+                  {isEditMode ? "Update details on the customer catalog" : "List a new meal on the customer catalog"}
                 </Text>
               </View>
             </View>
@@ -490,9 +491,9 @@ export default function AddFoodScreen() {
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
                 <>
-                  <Ionicons name="add" size={20} color="#fff" />
+                  <Ionicons name={isEditMode ? "save" : "add"} size={20} color="#fff" />
                   <Text className="text-white text-base font-bold" style={{ fontFamily: "Quicksand-Bold" }}>
-                    Add Item to Menu
+                    {isEditMode ? "Update Item" : "Add Item to Menu"}
                   </Text>
                 </>
               )}

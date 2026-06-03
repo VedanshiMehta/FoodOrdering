@@ -54,7 +54,8 @@ export default function CheckoutScreen() {
           {
             method: "POST",
             headers: {
-              Authorization: `Bearer ${process.env.STRIPE_SECRET_KEY}`,
+              Authorization:
+                "Bearer sk_test_51TbvAwBKPaQBNlXoqbLGGftRmuZbnIQM4SFMCaapzoAulEk0dqcLVyK1cM9hGVYeOzA82UPgEtOJcemOJog1VILz00PXKGjITL",
               "Content-Type": "application/x-www-form-urlencoded",
             },
             body: `amount=${Math.round(orderTotal * 100)}&currency=usd`,

@@ -1,8 +1,8 @@
 import React, { useContext, useEffect, useState } from "react";
 import { Alert } from "react-native";
 import * as ImagePicker from "expo-image-picker";
-import { useRouter } from "expo-router";
-import { ID } from "react-native-appwrite";
+import { useRouter, useLocalSearchParams } from "expo-router";
+import { ID, Query } from "react-native-appwrite";
 import AppwriteContext from "../app/lib/services/auth_services/AppwirteContext";
 import {
   APPWRITE_DATABASE_ID,
@@ -35,22 +35,94 @@ export default function useAddFoodForm() {
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Edit Mode States
+  const { editId } = useLocalSearchParams<{ editId: string }>();
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [existingImageUrl, setExistingImageUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    const init = async () => {
+      const allCus = await fetchCustomizations();
+      if (editId) {
+        setIsEditMode(true);
+        fetchExistingData(editId, allCus);
+      } else {
+        setIsEditMode(false);
+        setName("");
+        setPrice("");
+        setDescription("");
+        setCalories("350");
+        setProtein("22");
+        setCategoryId("");
+        setImageUri(null);
+        setExistingImageUrl(null);
+        setSelectedToppings([]);
+        setSelectedSides([]);
+      }
+    };
+    init();
+  }, [editId]);
+
+  const fetchExistingData = async (id: string, allCus: any[]) => {
+    try {
+      const item = await appwrite.getMenuItem(id);
+      if (item) {
+        setName(item.name || "");
+        setPrice(item.price?.toString() || "");
+        setDescription(item.description || "");
+        setCalories(item.calories?.toString() || "");
+        setProtein(item.protein?.toString() || "");
+        if (item.categories) {
+          const catId = typeof item.categories === "object" ? item.categories.$id : item.categories;
+          setCategoryId(catId);
+        }
+        setImageUri(item.image_url || null);
+        setExistingImageUrl(item.image_url || null);
+
+        // Fetch linked customizations
+        const cusResponse = await appwrite.database.listRows({
+          databaseId: APPWRITE_DATABASE_ID,
+          tableId: MENU_CUSTOMIZATIONS_COLLECTION_ID,
+          queries: [Query.equal("menu", id)],
+        });
+
+        const linkedCusIds = cusResponse.rows.map((row: any) => 
+          typeof row.customizations === 'object' ? row.customizations.$id : row.customizations
+        );
+
+        const toppings: string[] = [];
+        const sides: string[] = [];
+
+        linkedCusIds.forEach((cId: string) => {
+          const cusDef = allCus.find((c: any) => c.$id === cId);
+          if (cusDef) {
+            if (cusDef.type === "topping") toppings.push(cId);
+            else if (cusDef.type === "side") sides.push(cId);
+          }
+        });
+
+        setSelectedToppings(toppings);
+        setSelectedSides(sides);
+      }
+    } catch (e) {
+      console.log("Error fetching existing item", e);
+    }
+  };
+
   // Fetch customizations from database on mount
   const fetchCustomizations = async () => {
     setLoadingCustomizations(true);
     try {
       const allCus = await appwrite.getCustomizations();
       setCustomizations(allCus);
+      return allCus;
     } catch (err) {
       console.error("Failed to load customizations:", err);
+      return [];
     } finally {
       setLoadingCustomizations(false);
     }
   };
-
-  useEffect(() => {
-    fetchCustomizations();
-  }, []);
 
   const toggleTopping = (id: string) => {
     setSelectedToppings((prev) =>
@@ -136,64 +208,93 @@ export default function useAddFoodForm() {
 
     setIsSubmitting(true);
     try {
-      // 1. Upload local image to Appwrite storage bucket
-      const uploadedUrl = await appwrite.uploadFile(imageUri);
-      if (!uploadedUrl) {
-        throw new Error("Failed to upload food image to Appwrite storage.");
+      let uploadedUrl = imageUri;
+      if (imageUri && imageUri !== existingImageUrl) {
+        uploadedUrl = await appwrite.uploadFile(imageUri);
+        if (!uploadedUrl) {
+          throw new Error("Failed to upload food image to Appwrite storage.");
+        }
       }
 
-      // 2. Insert dish item into menu collection
-      const menuItemId = ID.unique();
+      const dataToSave = {
+        name: name.trim(),
+        description: description.trim(),
+        price: parseFloat(price) || 9.99,
+        rating: 4.5,
+        calories: parseInt(calories) || 350,
+        protein: parseInt(protein) || 20,
+        image_url: uploadedUrl,
+        categories: categoryId,
+        userId: user?.$id,
+      };
+
       let menuDoc;
-      try {
-        menuDoc = await appwrite.database.createRow({
-          databaseId: APPWRITE_DATABASE_ID,
-          tableId: MENU_COLLECTION_ID,
-          rowId: menuItemId,
-          data: {
-            name: name.trim(),
-            description: description.trim(),
-            price: parseFloat(price) || 9.99,
-            rating: 4.5,
-            calories: parseInt(calories) || 350,
-            protein: parseInt(protein) || 20,
-            image_url: uploadedUrl,
-            categories: categoryId,
-            userId: user?.$id,
-          },
-        });
-      } catch (schemaError: any) {
-        console.log("Appwrite menu schema lacks userId attribute or validation failed. Retrying without it...");
-        menuDoc = await appwrite.database.createRow({
-          databaseId: APPWRITE_DATABASE_ID,
-          tableId: MENU_COLLECTION_ID,
-          rowId: menuItemId,
-          data: {
-            name: name.trim(),
-            description: description.trim(),
-            price: parseFloat(price) || 9.99,
-            rating: 4.5,
-            calories: parseInt(calories) || 350,
-            protein: parseInt(protein) || 20,
-            image_url: uploadedUrl,
-            categories: categoryId,
-          },
-        });
+      if (isEditMode && editId) {
+        try {
+          menuDoc = await appwrite.database.updateRow({
+            databaseId: APPWRITE_DATABASE_ID,
+            tableId: MENU_COLLECTION_ID,
+            rowId: editId,
+            data: dataToSave,
+          });
+        } catch (schemaError: any) {
+          delete dataToSave.userId;
+          menuDoc = await appwrite.database.updateRow({
+            databaseId: APPWRITE_DATABASE_ID,
+            tableId: MENU_COLLECTION_ID,
+            rowId: editId,
+            data: dataToSave,
+          });
+        }
+      } else {
+        const menuItemId = ID.unique();
+        try {
+          menuDoc = await appwrite.database.createRow({
+            databaseId: APPWRITE_DATABASE_ID,
+            tableId: MENU_COLLECTION_ID,
+            rowId: menuItemId,
+            data: dataToSave,
+          });
+        } catch (schemaError: any) {
+          delete dataToSave.userId;
+          menuDoc = await appwrite.database.createRow({
+            databaseId: APPWRITE_DATABASE_ID,
+            tableId: MENU_COLLECTION_ID,
+            rowId: menuItemId,
+            data: dataToSave,
+          });
+        }
       }
 
       if (!menuDoc) {
         throw new Error("Failed to write menu item into the database.");
       }
 
-      // 3. Batch seed selections inside menu_customizations collection linking menu item to customizations
+      // 3. Update customizations
+      if (isEditMode && editId) {
+        const existingLinks = await appwrite.database.listRows({
+          databaseId: APPWRITE_DATABASE_ID,
+          tableId: MENU_CUSTOMIZATIONS_COLLECTION_ID,
+          queries: [Query.equal("menu", editId)]
+        });
+        for (const link of existingLinks.rows) {
+          await appwrite.database.deleteRow({
+            databaseId: APPWRITE_DATABASE_ID,
+            tableId: MENU_CUSTOMIZATIONS_COLLECTION_ID,
+            rowId: link.$id
+          });
+        }
+      }
+
       const allSelectedCustomizations = [...selectedToppings, ...selectedSides];
+      const targetMenuId = isEditMode && editId ? editId : menuDoc.$id;
       for (const cusId of allSelectedCustomizations) {
         await appwrite.database.createRow({
           databaseId: APPWRITE_DATABASE_ID,
           tableId: MENU_CUSTOMIZATIONS_COLLECTION_ID,
           rowId: ID.unique(),
           data: {
-            menu: menuItemId,
+            menu: targetMenuId,
             customizations: cusId,
           },
         });
@@ -201,7 +302,7 @@ export default function useAddFoodForm() {
 
       // 4. Update the local catalog state
       const localFoodItem = {
-        $id: menuItemId,
+        $id: menuDoc.$id,
         name: name.trim(),
         description: description.trim(),
         price: parseFloat(price) || 9.99,
@@ -211,7 +312,12 @@ export default function useAddFoodForm() {
       };
       addMyFoodItem(localFoodItem);
 
-      Alert.alert("Listing Published", `Dish "${name.trim()}" and its customizations have been listed successfully!`);
+      Alert.alert(
+        isEditMode ? "Listing Updated" : "Listing Published", 
+        isEditMode 
+          ? `Dish "${name.trim()}" has been updated successfully!` 
+          : `Dish "${name.trim()}" and its customizations have been listed successfully!`
+      );
       
       // Clear inputs
       setName("");
@@ -369,5 +475,6 @@ export default function useAddFoodForm() {
     handlePublishFood,
     handleCreateCategory,
     handleCreateCustomization,
+    isEditMode,
   };
 }

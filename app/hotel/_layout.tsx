@@ -125,6 +125,12 @@ export default function HotelLayout() {
             />
           ),
         }}
+        listeners={({ navigation }) => ({
+          tabPress: (e) => {
+            e.preventDefault();
+            navigation.navigate("add", { editId: undefined });
+          },
+        })}
       />
       <Tabs.Screen
         name="profile"
