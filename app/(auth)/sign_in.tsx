@@ -20,18 +20,15 @@ const SignIn = () => {
       return utils.showAlert("Please enter valid email and password", "Error");
     setIsSubmitting(true);
     try {
-      appwrite.login({ email, password }).then((response) => {
-        if (response) {
-          setIsLoggedIn(true);
-          appwrite.getCurrentUser().then((userResponse) => {
-            if (userResponse) {
-              setUser(userResponse as User);
-            }
-          });
+      const response = await appwrite.login({ email, password });
+      if (response) {
+        const userResponse = await appwrite.getCurrentUser();
+        if (userResponse) {
+          setUser(userResponse as User);
         }
-      });
-      // utils.showAlert("Signed in successful", "Success");
-      router.replace("/");
+        setIsLoggedIn(true);
+        router.replace("/");
+      }
     } catch (error) {
       utils.showAlert(String(error), "Error");
     } finally {

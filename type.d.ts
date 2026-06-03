@@ -20,6 +20,7 @@ export interface User extends Models.Document {
   name: string;
   email: string;
   avatar: string;
+  role?: "customer" | "admin" | "hotel" | "delivery" | "rider" | "manager" | string;
   phoneNumber?: string;
   address?: string;
   addressLabel?: string;
@@ -41,6 +42,12 @@ export interface CartItemType {
   image_url: string;
   quantity: number;
   customizations?: CartCustomization[];
+  pickupBranchId?: string;
+  pickupBranchName?: string;
+  pickupBranchAddress?: string;
+  pickupBranchLat?: string;
+  pickupBranchLng?: string;
+  pickupBranchLong?: string;
 }
 
 export interface CartStore {
@@ -101,6 +108,7 @@ interface CreateUserPrams {
   email: string;
   password: string;
   name: string;
+  role?: string;
 }
 
 interface SignInParams {

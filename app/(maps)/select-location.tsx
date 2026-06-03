@@ -67,6 +67,18 @@ export default function SelectLocationScreen() {
           longitude: currentRegion.longitude,
         });
 
+        // Mirror the address to the addresses collection
+        await appwrite.saveAddress({
+          userId: user.$id,
+          branchName: addressLabel,
+          address: address || "",
+          flatHouseNo: flatHouseNo || "",
+          phoneNumber: mobileNumber.trim(),
+          latitude: String(currentRegion.latitude),
+          longitude: String(currentRegion.longitude),
+          addressLabel: addressLabel,
+        });
+
         // Update local React Context user state so Profile UI refreshes dynamically!
         setUser({
           ...user,
@@ -101,8 +113,9 @@ export default function SelectLocationScreen() {
           <TouchableOpacity
             onPress={() => router.back()}
             style={styles.backButton}
+            activeOpacity={0.7}
           >
-            <Ionicons name="arrow-back" size={22} color="#1a1a1a" />
+            <Ionicons name="arrow-back" size={22} color="#111827" />
           </TouchableOpacity>
 
           <View style={styles.searchContainer}>
@@ -362,17 +375,14 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   backButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    borderWidth: 1,
+    borderColor: "#f3f4f6",
     backgroundColor: "#fff",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    elevation: 4,
   },
   searchContainer: {
     flex: 1,

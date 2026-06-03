@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import React, { useContext, useEffect, useState } from "react";
+import React, { useContext, useEffect, useState, useRef } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -12,12 +12,20 @@ import {
   View,
   TextInput,
   Alert,
+  Platform,
+  Dimensions,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useDispatch, useSelector } from "react-redux";
-import { setOrderHistory } from "../../store/slices/orderSlice";
+import { setOrderHistory, loadOrderForTracking, Order } from "../../store/slices/orderSlice";
 import { RootState } from "../../store/store";
 import AppwriteContext from "../lib/services/auth_services/AppwirteContext";
+import { useRouter, useLocalSearchParams } from "expo-router";
+import MapView, { PROVIDER_GOOGLE } from "react-native-maps";
+import { useLocationSetup } from "../../hooks/useLocationSetup";
+import { APPWRITE_DATABASE_ID, APPWRITE_USERS_COLLECTION_ID } from "../lib/services/auth_services/appwrite";
+
+const { height } = Dimensions.get("window");
 
 // Reusable custom profile detail row
 interface InfoRowProps {
@@ -65,8 +73,36 @@ const InfoRow: React.FC<InfoRowProps> = ({
   );
 };
 
+const extractFlatNo = (fullAddress: string) => {
+  if (!fullAddress) return "";
+  const parts = fullAddress.split(", ");
+  if (parts.length > 1) {
+    const firstPart = parts[0];
+    const hasDigits = /\d/.test(firstPart);
+    const hasFlatKeywords = /(flat|shop|house|floor|room|cabin|g-|f-|a-|b-|block|building|sector|plot|suite|apt|unit|no)/i.test(firstPart);
+    if (hasDigits || hasFlatKeywords) {
+      return firstPart;
+    }
+  }
+  return "";
+};
+
+const extractAddressOnly = (fullAddress: string) => {
+  if (!fullAddress) return "";
+  const parts = fullAddress.split(", ");
+  if (parts.length > 1) {
+    const flat = extractFlatNo(fullAddress);
+    if (flat) {
+      return parts.slice(1).join(", ");
+    }
+  }
+  return fullAddress;
+};
+
 export default function ProfileTab() {
+  const router = useRouter();
   const dispatch = useDispatch();
+  const insets = useSafeAreaInsets();
   const { user, appwrite, setIsLoggedIn, setUser } =
     useContext(AppwriteContext);
 
@@ -74,8 +110,15 @@ export default function ProfileTab() {
   const { orderHistory } = useSelector((state: RootState) => state.order);
 
   // Modal Sheet state
+  const { showHistory } = useLocalSearchParams<{ showHistory?: string }>();
   const [historyModalVisible, setHistoryModalVisible] = useState(false);
   const [loadingOrders, setLoadingOrders] = useState(false);
+
+  useEffect(() => {
+    if (showHistory === "true") {
+      setHistoryModalVisible(true);
+    }
+  }, [showHistory]);
 
   // Edit Profile state
   const [editModalVisible, setEditModalVisible] = useState(false);
@@ -84,6 +127,153 @@ export default function ProfileTab() {
   const [savingProfile, setSavingProfile] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [avatarModalVisible, setAvatarModalVisible] = useState(false);
+
+  // Multiple addresses state
+  const [savedAddresses, setSavedAddresses] = useState<any[]>([]);
+  const [formAddresses, setFormAddresses] = useState<any[]>([]);
+  const [loadingAddresses, setLoadingAddresses] = useState(false);
+
+  // Map Selection states & hook
+  const mapRef = useRef<MapView>(null);
+  const [mapModalVisible, setMapModalVisible] = useState(false);
+  const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
+  const [addressLabel, setAddressLabel] = useState<"Home" | "Work" | "Other">("Home");
+  const [mapContactNumber, setMapContactNumber] = useState("");
+
+  const {
+    currentRegion,
+    address: mapAddress,
+    setAddress: setMapAddress,
+    flatHouseNo: mapFlatHouseNo,
+    setFlatHouseNo: setMapFlatHouseNo,
+    searchQuery: mapSearchQuery,
+    setSearchQuery: setMapSearchQuery,
+    addressSuggestions: mapAddressSuggestions,
+    suggestionsLoading: mapSuggestionsLoading,
+    searching: mapSearching,
+    currentLocationLoading: mapCurrentLocationLoading,
+    searchAddress: mapSearchAddress,
+    selectAddressSuggestion: mapSelectAddressSuggestion,
+    clearSearch: mapClearSearch,
+    locateCurrentPosition: mapLocateCurrentPosition,
+    zoomIn: mapZoomIn,
+    zoomOut: mapZoomOut,
+    onRegionChangeComplete,
+  } = useLocationSetup();
+
+  // Fetch saved addresses from Appwrite on mount or user change
+  const fetchSavedAddresses = async () => {
+    if (!user?.$id) return;
+    setLoadingAddresses(true);
+    try {
+      const addresses = await appwrite.getUserAddresses(user.$id);
+      setSavedAddresses(addresses);
+    } catch (err) {
+      console.error("Error fetching saved addresses:", err);
+    } finally {
+      setLoadingAddresses(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchSavedAddresses();
+  }, [appwrite, user]);
+
+  // Sync addresses to local in-memory form list when Edit Profile modal opens
+  useEffect(() => {
+    if (editModalVisible) {
+      if (savedAddresses.length > 0) {
+        setFormAddresses([...savedAddresses]);
+      } else if (user?.address) {
+        const flat = extractFlatNo(user.address);
+        const addr = extractAddressOnly(user.address);
+        setFormAddresses([
+          {
+            $id: "primary",
+            userId: user.$id,
+            branchName: user.addressLabel || "Home",
+            address: addr,
+            flatHouseNo: flat,
+            phoneNumber: user.phoneNumber || "",
+            latitude: String(user.latitude || "20.5992"),
+            longitude: String(user.longitude || "72.9342"),
+          }
+        ]);
+      } else {
+        setFormAddresses([]);
+      }
+    }
+  }, [editModalVisible, savedAddresses, user]);
+
+  const handleEditAddress = (addr: any) => {
+    setEditingAddressId(addr.$id);
+    setAddressLabel(addr.branchName as "Home" | "Work" | "Other" || "Home");
+    const flat = addr.flatHouseNo || extractFlatNo(addr.address);
+    const addressOnly = addr.flatHouseNo ? addr.address : extractAddressOnly(addr.address);
+    setMapAddress(addressOnly || "");
+    setMapFlatHouseNo(flat || "");
+    setMapContactNumber(addr.phoneNumber || user?.phoneNumber || "");
+    setMapModalVisible(true);
+
+    setTimeout(() => {
+      if (addr.latitude && addr.longitude && mapRef.current) {
+        mapRef.current.animateToRegion({
+          latitude: parseFloat(addr.latitude),
+          longitude: parseFloat(addr.longitude),
+          latitudeDelta: 0.00922,
+          longitudeDelta: 0.00421,
+        }, 400);
+      }
+    }, 500);
+  };
+
+  const handleAddNewAddress = () => {
+    setEditingAddressId(null);
+    setAddressLabel("Home");
+    setMapAddress("");
+    setMapFlatHouseNo("");
+    setMapContactNumber(user?.phoneNumber || "");
+    setMapModalVisible(true);
+  };
+
+  const handleDeleteAddress = (addrId: string) => {
+    Alert.alert(
+      "Confirm Delete",
+      "Are you sure you want to remove this saved address?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            setFormAddresses((prev) => prev.filter((addr) => addr.$id !== addrId));
+          },
+        },
+      ]
+    );
+  };
+
+  const handleConfirmLocation = () => {
+    if (!user) return;
+    const newAddressObj = {
+      $id: editingAddressId || `temp-${Date.now()}`,
+      userId: user.$id,
+      branchName: addressLabel,
+      address: mapAddress || "",
+      flatHouseNo: mapFlatHouseNo || "",
+      phoneNumber: mapContactNumber,
+      latitude: String(currentRegion.latitude),
+      longitude: String(currentRegion.longitude),
+    };
+
+    // Update local state ONLY (no database write!)
+    if (editingAddressId) {
+      setFormAddresses((prev) => prev.map((addr) => (addr.$id === editingAddressId ? newAddressObj : addr)));
+    } else {
+      setFormAddresses((prev) => [...prev, newAddressObj]);
+    }
+    setMapModalVisible(false);
+  };
 
   const handleLaunchCamera = async () => {
     try {
@@ -197,6 +387,7 @@ export default function ProfileTab() {
     setSavingProfile(true);
     try {
       if (user) {
+        // 1. Update basic info (name, phone) on Appwrite
         const updatedDoc = await appwrite.updateUserBasicInfo({
           userId: user.$id,
           name: editName.trim(),
@@ -204,13 +395,69 @@ export default function ProfileTab() {
         });
 
         if (updatedDoc) {
+          let primaryAddress = user.address || "";
+          let primaryAddressLabel = user.addressLabel || "Home";
+          let primaryLat: number | null = user.latitude ? Number(user.latitude) : null;
+          let primaryLong: number | null = user.longitude ? Number(user.longitude) : null;
+
+          // 2. Process formAddresses: save new ones and update existing ones in Appwrite
+          for (const addr of formAddresses) {
+            const isTemp = addr.$id.startsWith("temp-") || addr.$id === "primary";
+            const combinedAddr = (addr.flatHouseNo ? addr.flatHouseNo.trim() + ", " : "") + (addr.address || "");
+            
+            await appwrite.saveAddress({
+              rowId: isTemp ? undefined : addr.$id,
+              userId: user.$id,
+              branchName: addr.branchName || "Home",
+              address: addr.address || "",
+              flatHouseNo: addr.flatHouseNo || "",
+              phoneNumber: addr.phoneNumber || editPhoneNumber.trim(),
+              latitude: String(addr.latitude),
+              longitude: String(addr.longitude),
+              addressLabel: addr.branchName || "Home",
+            });
+
+            // Set the first address as the primary user address
+            if (addr === formAddresses[0]) {
+              primaryAddress = combinedAddr;
+              primaryAddressLabel = addr.branchName || "Home";
+              primaryLat = parseFloat(addr.latitude);
+              primaryLong = parseFloat(addr.longitude);
+            }
+          }
+
+          // 3. Delete removed addresses from Appwrite
+          const deletedAddresses = savedAddresses.filter((s) => !formAddresses.some((f) => f.$id === s.$id));
+          for (const da of deletedAddresses) {
+            await appwrite.deleteAddress(da.$id);
+          }
+
+          // 4. Update the user primary address & phone on Appwrite users table
+          await appwrite.updateUserProfile({
+            userId: user.$id,
+            phoneNumber: editPhoneNumber.trim(),
+            address: primaryAddress,
+            addressLabel: primaryAddressLabel,
+            latitude: primaryLat !== null ? primaryLat : undefined,
+            longitude: primaryLong !== null ? primaryLong : undefined,
+          });
+
+          // 5. Update local React Context so header and Profile screens refresh dynamically
           setUser({
             ...user,
             name: editName.trim(),
             phoneNumber: editPhoneNumber.trim(),
             avatar: updatedDoc.avatar,
+            address: primaryAddress,
+            addressLabel: primaryAddressLabel,
+            latitude: primaryLat !== null ? primaryLat : undefined,
+            longitude: primaryLong !== null ? primaryLong : undefined,
           });
-          Alert.alert("Profile Updated", "Your profile details have been saved successfully.");
+
+          // 6. Reload database state
+          await fetchSavedAddresses();
+
+          Alert.alert("Profile Updated", "Your profile details and addresses have been saved successfully.");
           setEditModalVisible(false);
         } else {
           throw new Error("Update operation failed.");
@@ -264,6 +511,14 @@ export default function ProfileTab() {
       setUser(null);
     } catch (error) {
       console.error("Logout failed:", error);
+    }
+  };
+
+  const handleOrderPress = (order: Order) => {
+    if (order.status !== "delivered") {
+      setHistoryModalVisible(false);
+      dispatch(loadOrderForTracking(order));
+      router.push("/tracking" as any);
     }
   };
 
@@ -327,7 +582,17 @@ export default function ProfileTab() {
             icon="location-outline"
             label={`Address (${user?.addressLabel || "Home"})`}
             value={user?.address || "123 Main Street, Springfield, IL 62704"}
+            isLast={savedAddresses.length <= 1}
           />
+          {savedAddresses.slice(1).map((addr, index) => (
+            <InfoRow
+              key={addr.$id}
+              icon={addr.branchName === "Home" ? "home-outline" : addr.branchName === "Work" ? "briefcase-outline" : "location-outline"}
+              label={`Address (${addr.branchName || "Secondary"})`}
+              value={(addr.flatHouseNo ? addr.flatHouseNo + ", " : "") + addr.address}
+              isLast={index === savedAddresses.length - 2}
+            />
+          ))}
           <InfoRow
             icon="receipt-outline"
             label="Order History"
@@ -357,55 +622,60 @@ export default function ProfileTab() {
         </TouchableOpacity>
       </ScrollView>
 
-      {/* Completed Orders BottomSheet Modal */}
+      {/* Completed Orders Opaque Full Screen Modal Screen */}
       <Modal
         visible={historyModalVisible}
         animationType="slide"
-        transparent={true}
+        transparent={false}
         onRequestClose={() => setHistoryModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.sheetContainer}>
-            {/* Grab Bar */}
-            <View style={styles.dragHandle} />
+        <SafeAreaView style={styles.modalScreenContainer} edges={["top"]}>
+          {/* Navigation Header */}
+          <View style={[styles.modalHeader, { paddingTop: Math.max(insets.top, Platform.OS === 'ios' ? 44 : 24) }]}>
+            <TouchableOpacity
+              onPress={() => setHistoryModalVisible(false)}
+              activeOpacity={0.7}
+              style={styles.modalCloseButton}
+            >
+              <Ionicons name="arrow-back" size={22} color="#111827" />
+            </TouchableOpacity>
+            <Text style={[styles.modalHeaderTitle, { fontFamily: "Quicksand-Bold" }]}>
+              Order History ({orderHistory.length})
+            </Text>
+            <View style={{ width: 40 }} />
+          </View>
 
-            {/* Sheet Header */}
-            <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>
-                Order History ({orderHistory.length})
+          {/* List Content */}
+          {loadingOrders ? (
+            <View style={styles.loaderContainer}>
+              <ActivityIndicator size="large" color="#f97316" />
+              <Text style={styles.loaderText}>
+                Syncing orders from Appwrite...
               </Text>
-              <TouchableOpacity
-                style={styles.sheetCloseButton}
-                onPress={() => setHistoryModalVisible(false)}
-              >
-                <Ionicons name="close" size={20} color="#4b5563" />
-              </TouchableOpacity>
             </View>
-
-            {/* List Content */}
-            {loadingOrders ? (
-              <View style={styles.loaderContainer}>
-                <ActivityIndicator size="large" color="#f97316" />
-                <Text style={styles.loaderText}>
-                  Syncing orders from Appwrite...
-                </Text>
-              </View>
-            ) : orderHistory.length === 0 ? (
-              <View style={styles.emptyContainer}>
-                <Ionicons name="receipt-outline" size={48} color="#d1d5db" />
-                <Text style={styles.emptyText}>No past orders found.</Text>
-                <Text style={styles.emptySubtext}>
-                  Your completed orders will be listed here.
-                </Text>
-              </View>
-            ) : (
-              <FlatList
-                data={sortedOrders}
-                keyExtractor={(item) => item.id}
-                contentContainerStyle={styles.listContent}
-                showsVerticalScrollIndicator={false}
-                renderItem={({ item }) => (
-                  <View style={styles.orderCard}>
+          ) : orderHistory.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="receipt-outline" size={48} color="#d1d5db" />
+              <Text style={styles.emptyText}>No past orders found.</Text>
+              <Text style={styles.emptySubtext}>
+                Your completed orders will be listed here.
+              </Text>
+            </View>
+          ) : (
+            <FlatList
+              data={sortedOrders}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={styles.modalListContent}
+              showsVerticalScrollIndicator={false}
+              renderItem={({ item }) => {
+                const isPending = item.status !== "delivered";
+                const CardContainer = isPending ? TouchableOpacity : View;
+                return (
+                  <CardContainer
+                    style={styles.orderCard}
+                    onPress={isPending ? () => handleOrderPress(item) : undefined}
+                    activeOpacity={0.8}
+                  >
                     {/* Header */}
                     <View style={styles.cardHeader}>
                       <View>
@@ -414,13 +684,48 @@ export default function ProfileTab() {
                           {formatDate(item.timestamp)}
                         </Text>
                       </View>
-                      <View style={styles.statusBadge}>
+                      <View
+                        style={[
+                          styles.statusBadge,
+                          item.status === "delivered"
+                            ? { backgroundColor: "#f0fdf4", borderColor: "#bbf7d0" }
+                            : item.status === "picked_up"
+                            ? { backgroundColor: "#fff7ed", borderColor: "#ffedd5" }
+                            : { backgroundColor: "#fffbeb", borderColor: "#fef3c7" },
+                          { borderWidth: 1, borderRadius: 12, paddingHorizontal: 8, paddingVertical: 2 }
+                        ]}
+                      >
                         <Ionicons
-                          name="checkmark-circle"
-                          size={14}
-                          color="#10b981"
+                          name={
+                            item.status === "delivered"
+                              ? "checkmark-circle"
+                              : item.status === "picked_up"
+                              ? "bicycle"
+                              : "time"
+                          }
+                          size={12}
+                          color={
+                            item.status === "delivered"
+                              ? "#10b981"
+                              : item.status === "picked_up"
+                              ? "#f97316"
+                              : "#d97706"
+                          }
+                          style={{ marginRight: 4 }}
                         />
-                        <Text style={styles.statusText}>Delivered</Text>
+                        <Text
+                          style={[
+                            styles.statusText,
+                            item.status === "delivered"
+                              ? { color: "#10b981" }
+                              : item.status === "picked_up"
+                              ? { color: "#f97316" }
+                              : { color: "#d97706" },
+                            { fontFamily: "Quicksand-Bold", fontSize: 10, textTransform: "uppercase" }
+                          ]}
+                        >
+                          {item.status === "picked_up" ? "On the Way" : item.status || "Pending"}
+                        </Text>
                       </View>
                     </View>
 
@@ -453,16 +758,26 @@ export default function ProfileTab() {
                           {item.address}
                         </Text>
                       </View>
-                      <Text style={styles.totalPrice}>
-                        Total: ${item.total.toFixed(2)}
-                      </Text>
+                      <View style={{ alignItems: "flex-end", gap: 2 }}>
+                        <Text style={styles.totalPrice}>
+                          Total: ${item.total.toFixed(2)}
+                        </Text>
+                        {isPending && (
+                          <View style={{ flexDirection: "row", alignItems: "center", gap: 3, marginTop: 4 }}>
+                            <Ionicons name="navigate-circle" size={14} color="#f97316" />
+                            <Text style={{ fontFamily: "Quicksand-Bold", fontSize: 10, color: "#f97316" }}>
+                              Tap to Track Live
+                            </Text>
+                          </View>
+                        )}
+                      </View>
                     </View>
-                  </View>
-                )}
-              />
-            )}
-          </View>
-        </View>
+                  </CardContainer>
+                );
+              }}
+            />
+          )}
+        </SafeAreaView>
       </Modal>
 
       {/* Edit Profile Modal */}
@@ -552,6 +867,53 @@ export default function ProfileTab() {
                 </View>
               </View>
 
+              {/* Saved Addresses Section inside Profile edit modal */}
+              <View style={[styles.inputContainer, { marginTop: 15 }]}>
+                <Text style={styles.inputLabel}>Saved Addresses</Text>
+                
+                {loadingAddresses ? (
+                  <ActivityIndicator size="small" color="#f97316" style={{ marginVertical: 10 }} />
+                ) : formAddresses.length === 0 ? (
+                  <Text style={styles.emptyAddressesText}>No saved addresses found.</Text>
+                ) : (
+                  formAddresses.map((addr) => (
+                    <View key={addr.$id} style={styles.addressListItem}>
+                      <View style={styles.addressListLeft}>
+                        <Ionicons 
+                          name={addr.branchName === "Home" ? "home-outline" : addr.branchName === "Work" ? "briefcase-outline" : "location-outline"} 
+                          size={18} 
+                          color="#f97316" 
+                        />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.addressListBranch}>{addr.branchName || "Address"}</Text>
+                          <Text style={styles.addressListVal} numberOfLines={1}>
+                            {(addr.flatHouseNo ? addr.flatHouseNo + ", " : "") + addr.address}
+                          </Text>
+                        </View>
+                      </View>
+                      
+                      <View style={styles.addressListActions}>
+                        <TouchableOpacity onPress={() => handleEditAddress(addr)} style={styles.actionIconBtn}>
+                          <Ionicons name="pencil-outline" size={16} color="#4b5563" />
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => handleDeleteAddress(addr.$id)} style={styles.actionIconBtn}>
+                          <Ionicons name="trash-outline" size={16} color="#ef4444" />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ))
+                )}
+
+                <TouchableOpacity
+                  onPress={handleAddNewAddress}
+                  activeOpacity={0.7}
+                  style={styles.addAddressLink}
+                >
+                  <Ionicons name="add-circle-outline" size={16} color="#f97316" />
+                  <Text style={styles.addAddressLinkText}>Add New Address / Branch</Text>
+                </TouchableOpacity>
+              </View>
+
               {/* Save Button */}
               <TouchableOpacity
                 style={styles.saveButton}
@@ -566,6 +928,243 @@ export default function ProfileTab() {
                 )}
               </TouchableOpacity>
             </ScrollView>
+
+            {/* Map Selection Modal - NESTED inside Edit Profile Modal to support dual overlays on iOS! */}
+            <Modal
+              visible={mapModalVisible}
+              animationType="slide"
+              onRequestClose={() => setMapModalVisible(false)}
+            >
+              <View style={mapStyles.container}>
+                {/* Top Bar with Back Arrow and Autocomplete Search Bar */}
+                <View style={[mapStyles.topBarWrapper, { paddingTop: insets.top > 0 ? insets.top : 12 }]}>
+                  <View style={mapStyles.topRow}>
+                    <TouchableOpacity
+                      onPress={() => setMapModalVisible(false)}
+                      style={mapStyles.backButton}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="arrow-back" size={22} color="#111827" />
+                    </TouchableOpacity>
+
+                    <View style={mapStyles.searchContainer}>
+                      <Ionicons
+                        name="search-outline"
+                        size={20}
+                        color="#9ca3af"
+                        style={mapStyles.searchIcon}
+                      />
+                      <TextInput
+                        style={mapStyles.searchInput}
+                        placeholder="Search address, area or city..."
+                        placeholderTextColor="#9ca3af"
+                        value={mapSearchQuery}
+                        onChangeText={setMapSearchQuery}
+                        onSubmitEditing={() => mapSearchAddress(mapSearchQuery, mapRef)}
+                        returnKeyType="search"
+                        autoCorrect={false}
+                        contextMenuHidden={true}
+                      />
+                      {mapSearching ? (
+                        <ActivityIndicator
+                          size="small"
+                          color="#f97316"
+                          style={mapStyles.searchLoader}
+                        />
+                      ) : mapSearchQuery.length > 0 ? (
+                        <TouchableOpacity
+                          onPress={mapClearSearch}
+                          style={mapStyles.clearButton}
+                        >
+                          <Ionicons name="close-circle" size={18} color="#9ca3af" />
+                        </TouchableOpacity>
+                      ) : null}
+                    </View>
+                  </View>
+
+                  {(mapSuggestionsLoading || mapAddressSuggestions.length > 0) && (
+                    <View style={mapStyles.suggestionsContainer}>
+                      {mapSuggestionsLoading ? (
+                        <View style={mapStyles.suggestionRow}>
+                          <ActivityIndicator size="small" color="#f97316" />
+                          <Text style={mapStyles.suggestionSecondary}>Searching...</Text>
+                        </View>
+                      ) : (
+                        mapAddressSuggestions.map((item) => (
+                          <TouchableOpacity
+                            key={item.placeId ?? item.description}
+                            style={mapStyles.suggestionRow}
+                            activeOpacity={0.75}
+                            onPress={() => mapSelectAddressSuggestion(item, mapRef)}
+                          >
+                            <Ionicons name="location-outline" size={18} color="#f97316" />
+                            <View style={mapStyles.suggestionTextBlock}>
+                              <Text style={mapStyles.suggestionPrimary} numberOfLines={1}>
+                                {item.primaryText}
+                              </Text>
+                              <Text style={mapStyles.suggestionSecondary} numberOfLines={2}>
+                                {item.secondaryText}
+                              </Text>
+                            </View>
+                          </TouchableOpacity>
+                        ))
+                      )}
+                    </View>
+                  )}
+                </View>
+
+                {/* Map View */}
+                <MapView
+                  ref={mapRef}
+                  style={mapStyles.map}
+                  provider={PROVIDER_GOOGLE}
+                  initialRegion={currentRegion}
+                  onRegionChangeComplete={onRegionChangeComplete}
+                  showsUserLocation={true}
+                  showsMyLocationButton={false}
+                />
+
+                {/* Locate Current Position Trigger */}
+                <TouchableOpacity
+                  style={[mapStyles.currentLocationButton, { top: insets.top > 0 ? insets.top + 64 : 80 }]}
+                  onPress={() => mapLocateCurrentPosition(mapRef)}
+                  activeOpacity={0.85}
+                  disabled={mapCurrentLocationLoading}
+                >
+                  {mapCurrentLocationLoading ? (
+                    <ActivityIndicator size="small" color="#1f2937" />
+                  ) : (
+                    <Ionicons name="locate" size={23} color="#1f2937" />
+                  )}
+                </TouchableOpacity>
+
+                {/* Zoom Buttons Overlay */}
+                <View style={mapStyles.zoomControlsContainer}>
+                  <TouchableOpacity
+                    style={mapStyles.zoomButton}
+                    onPress={() => mapZoomIn(mapRef)}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="add" size={24} color="#1a1a1a" />
+                  </TouchableOpacity>
+                  <View style={mapStyles.zoomDivider} />
+                  <TouchableOpacity
+                    style={mapStyles.zoomButton}
+                    onPress={() => mapZoomOut(mapRef)}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name="remove" size={24} color="#1a1a1a" />
+                  </TouchableOpacity>
+                </View>
+
+                {/* Center Location Map Pin Overlay */}
+                <View style={mapStyles.pinContainer} pointerEvents="none">
+                  <Ionicons name="location-sharp" size={44} color="#f97316" />
+                  <View style={mapStyles.pinShadow} />
+                </View>
+
+                {/* Floating Confirm Location Bottom Card */}
+                <View style={[mapStyles.card, { paddingBottom: insets.bottom > 0 ? insets.bottom + 12 : 24 }]}>
+                  <View style={mapStyles.dragHandle} />
+                  <Text style={mapStyles.cardTitle}>Selected Location</Text>
+                  
+                  <View style={mapStyles.addressRow}>
+                    <Ionicons
+                      name="location-outline"
+                      size={18}
+                      color="#f97316"
+                      style={{ marginTop: 2 }}
+                    />
+                    <TextInput
+                      style={mapStyles.addressInput}
+                      value={mapAddress || ""}
+                      onChangeText={setMapAddress}
+                      multiline={true}
+                      numberOfLines={2}
+                      placeholder="Move the map or type address here..."
+                      placeholderTextColor="#9ca3af"
+                    />
+                  </View>
+
+                  <View style={mapStyles.detailInputWrapper}>
+                    <Ionicons name="home-outline" size={18} color="#f97316" />
+                    <TextInput
+                      style={mapStyles.detailInput}
+                      placeholder="Flat / House no. / Floor"
+                      placeholderTextColor="#9ca3af"
+                      value={mapFlatHouseNo}
+                      onChangeText={setMapFlatHouseNo}
+                      returnKeyType="next"
+                    />
+                  </View>
+
+                  <View style={mapStyles.detailInputWrapper}>
+                    <Ionicons name="call-outline" size={18} color="#f97316" />
+                    <TextInput
+                      style={mapStyles.detailInput}
+                      placeholder="Contact number"
+                      placeholderTextColor="#9ca3af"
+                      value={mapContactNumber}
+                      onChangeText={setMapContactNumber}
+                      keyboardType="phone-pad"
+                      returnKeyType="done"
+                    />
+                  </View>
+
+                  {/* Save Address As chips */}
+                  <Text style={styles.sectionLabel}>Save Address As</Text>
+                  <View style={styles.chipsRow}>
+                    <TouchableOpacity
+                      style={[styles.chip, addressLabel === "Home" && styles.activeChip]}
+                      onPress={() => setAddressLabel("Home")}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons
+                        name={addressLabel === "Home" ? "home" : "home-outline"}
+                        size={16}
+                        color={addressLabel === "Home" ? "#fff" : "#f97316"}
+                      />
+                      <Text style={[styles.chipText, addressLabel === "Home" && styles.activeChipText]}>Home</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.chip, addressLabel === "Work" && styles.activeChip]}
+                      onPress={() => setAddressLabel("Work")}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons
+                        name={addressLabel === "Work" ? "briefcase" : "briefcase-outline"}
+                        size={16}
+                        color={addressLabel === "Work" ? "#fff" : "#f97316"}
+                      />
+                      <Text style={[styles.chipText, addressLabel === "Work" && styles.activeChipText]}>Work</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.chip, addressLabel === "Other" && styles.activeChip]}
+                      onPress={() => setAddressLabel("Other")}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons
+                        name={addressLabel === "Other" ? "location" : "location-outline"}
+                        size={16}
+                        color={addressLabel === "Other" ? "#fff" : "#f97316"}
+                      />
+                      <Text style={[styles.chipText, addressLabel === "Other" && styles.activeChipText]}>Other</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <TouchableOpacity
+                    style={mapStyles.confirmButton}
+                    onPress={handleConfirmLocation}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="checkmark-circle-outline" size={20} color="#fff" />
+                    <Text style={mapStyles.confirmButtonText}>Confirm Location</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </Modal>
           </View>
         </View>
       </Modal>
@@ -1127,5 +1726,381 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: "Quicksand-Bold",
     color: "#4b5563",
+  },
+
+  // Opaque Full Screen Modal Styles (matching driver history)
+  modalScreenContainer: {
+    flex: 1,
+    backgroundColor: "#f9fafb",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 16,
+    backgroundColor: "#f9fafb",
+  },
+  modalCloseButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    borderWidth: 1,
+    borderColor: "#f3f4f6",
+    backgroundColor: "#fff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalHeaderTitle: {
+    fontSize: 16,
+    fontFamily: "Quicksand-Bold",
+    color: "#1f2937",
+  },
+  modalListContent: {
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 40,
+  },
+  emptyAddressesText: {
+    fontFamily: "Quicksand-Medium",
+    fontSize: 13,
+    color: "#9ca3af",
+    marginVertical: 10,
+    fontStyle: "italic",
+  },
+  addressListItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#f9fafb",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 10,
+  },
+  addressListLeft: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginRight: 10,
+  },
+  addressListBranch: {
+    fontFamily: "Quicksand-Bold",
+    fontSize: 13,
+    color: "#1f2937",
+    marginBottom: 2,
+  },
+  addressListVal: {
+    fontFamily: "Quicksand-Medium",
+    fontSize: 12,
+    color: "#6b7280",
+  },
+  addressListActions: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  actionIconBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  addAddressLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginTop: 8,
+    paddingVertical: 4,
+  },
+  addAddressLinkText: {
+    fontFamily: "Quicksand-Bold",
+    fontSize: 14,
+    color: "#f97316",
+  },
+  sectionLabel: {
+    fontSize: 13,
+    fontFamily: "Quicksand-Bold",
+    color: "#6b7280",
+    marginBottom: 8,
+    marginTop: 10,
+  },
+  chipsRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 18,
+  },
+  chip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  activeChip: {
+    backgroundColor: "#f97316",
+    borderColor: "#f97316",
+  },
+  chipText: {
+    fontSize: 13,
+    fontFamily: "Quicksand-Bold",
+    color: "#4b5563",
+  },
+  activeChipText: {
+    color: "#fff",
+  },
+});
+
+const mapStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#fff",
+  },
+  map: {
+    width: "100%",
+    height: height,
+  },
+  topBarWrapper: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+  },
+  topRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingTop: 0,
+    gap: 12,
+  },
+  backButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    borderWidth: 1,
+    borderColor: "#f3f4f6",
+    backgroundColor: "#fff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  searchContainer: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    borderRadius: 22,
+    height: 44,
+    paddingHorizontal: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  searchIcon: {
+    marginRight: 6,
+  },
+  searchInput: {
+    flex: 1,
+    height: "100%",
+    fontFamily: "Quicksand-Medium",
+    fontSize: 14,
+    color: "#1f2937",
+  },
+  searchLoader: {
+    padding: 4,
+  },
+  clearButton: {
+    padding: 4,
+  },
+  suggestionsContainer: {
+    marginLeft: 72,
+    marginRight: 16,
+    marginTop: 8,
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    paddingVertical: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  currentLocationButton: {
+    position: "absolute",
+    right: 16,
+    top: Platform.OS === "ios" ? 110 : 120,
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: "#fff",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 4,
+    zIndex: 10,
+  },
+  suggestionRow: {
+    minHeight: 58,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  suggestionTextBlock: {
+    flex: 1,
+  },
+  suggestionPrimary: {
+    fontSize: 14,
+    fontFamily: "Quicksand-Bold",
+    color: "#111827",
+  },
+  suggestionSecondary: {
+    fontSize: 12,
+    lineHeight: 17,
+    fontFamily: "Quicksand-Regular",
+    color: "#6b7280",
+  },
+  zoomControlsContainer: {
+    position: "absolute",
+    right: 16,
+    top: "35%",
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 4,
+    overflow: "hidden",
+    zIndex: 10,
+  },
+  zoomButton: {
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fff",
+  },
+  zoomDivider: {
+    height: 1,
+    backgroundColor: "#f3f4f6",
+    marginHorizontal: 8,
+  },
+  pinContainer: {
+    position: "absolute",
+    top: "50%",
+    left: "50%",
+    marginLeft: -22,
+    marginTop: -52,
+    alignItems: "center",
+  },
+  pinShadow: {
+    width: 10,
+    height: 4,
+    borderRadius: 5,
+    backgroundColor: "rgba(0,0,0,0.2)",
+    marginTop: -4,
+  },
+  card: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 20,
+  },
+  dragHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "#e5e7eb",
+    alignSelf: "center",
+    marginBottom: 20,
+  },
+  cardTitle: {
+    fontSize: 20,
+    fontFamily: "Quicksand-Bold",
+    color: "#111827",
+    marginBottom: 10,
+  },
+  addressRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    marginBottom: 20,
+    minHeight: 44,
+  },
+  addressInput: {
+    flex: 1,
+    fontSize: 15,
+    fontFamily: "Quicksand-Regular",
+    color: "#6b7280",
+    padding: 0,
+    margin: 0,
+    textAlignVertical: "top",
+    minHeight: 44,
+  },
+  detailInputWrapper: {
+    minHeight: 50,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    marginBottom: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#f9fafb",
+  },
+  detailInput: {
+    flex: 1,
+    height: 48,
+    fontFamily: "Quicksand-Medium",
+    fontSize: 15,
+    color: "#111827",
+  },
+  confirmButton: {
+    backgroundColor: "#f97316",
+    borderRadius: 16,
+    paddingVertical: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    shadowColor: "#f97316",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 8,
+    elevation: 6,
+    marginTop: 10,
+  },
+  confirmButtonText: {
+    color: "#fff",
+    fontSize: 17,
+    fontFamily: "Quicksand-Bold",
   },
 });

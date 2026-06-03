@@ -7,9 +7,17 @@ import { Image, Text, TouchableOpacity, View } from "react-native";
 const CartItem = ({ item }: { item: CartItemType }) => {
   const { increaseQty, decreaseQty, removeItem } = useContext(CartContext);
 
+  const customizationPrice = item.customizations?.reduce((sum, c) => sum + c.price, 0) ?? 0;
+  const singleItemTotal = item.price + customizationPrice;
+
+  const customizationsList = item.customizations
+    ?.filter((c) => c.price > 0 || c.type === "Bun Type")
+    .map((c) => c.name)
+    .join(", ");
+
   return (
-    <View className="cart-item">
-      <View className="flex flex-row items-center gap-x-3">
+    <View className="cart-item items-end px-4 py-3">
+      <View className="flex flex-row items-center gap-x-3 flex-1 mr-4">
         <View className="cart-item__image">
           <Image
             source={{ uri: item.image_url }}
@@ -18,10 +26,15 @@ const CartItem = ({ item }: { item: CartItemType }) => {
           />
         </View>
 
-        <View>
-          <Text className="base-bold text-dark-100">{item.name}</Text>
+        <View className="flex-1 justify-center">
+          <Text className="base-bold text-dark-100" numberOfLines={1}>{item.name}</Text>
+          {customizationsList ? (
+            <Text className="text-[10px] text-gray-400 mt-0.5 leading-tight" numberOfLines={1}>
+              {customizationsList}
+            </Text>
+          ) : null}
           <Text className="paragraph-bold text-primary mt-1">
-            ${item.price}
+            ${singleItemTotal.toFixed(2)}
           </Text>
 
           <View className="flex flex-row items-center gap-x-4 mt-2">
@@ -56,7 +69,7 @@ const CartItem = ({ item }: { item: CartItemType }) => {
 
       <TouchableOpacity
         onPress={() => removeItem(item.id, item.customizations!)}
-        className="flex-center"
+        className="p-1 mb-1 flex-center"
       >
         <Image source={images.trash} className="size-5" resizeMode="contain" />
       </TouchableOpacity>

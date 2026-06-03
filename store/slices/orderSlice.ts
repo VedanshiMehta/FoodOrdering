@@ -10,6 +10,19 @@ export interface Order {
   timestamp: string;
   userId?: string;
   userName?: string;
+  status?: string;
+  $id?: string;
+  deliveryBoyId?: string;
+  deliveryBoyName?: string;
+  deliveryBoyPhone?: string;
+  pickupBranchId?: string;
+  pickupBranchName?: string;
+  pickupBranchAddress?: string;
+  pickupBranchLat?: string;
+  pickupBranchLng?: string;
+  pickupBranchLong?: string;
+  userLat?: string;
+  userLong?: string;
 }
 
 export interface OrderState {
@@ -52,6 +65,19 @@ export const orderSlice = createSlice({
     setTrackingStatus: (state, action: PayloadAction<OrderState['trackingStatus']>) => {
       state.trackingStatus = action.payload;
     },
+    updateCurrentOrderDbId: (state, action: PayloadAction<string>) => {
+      if (state.currentOrder) {
+        state.currentOrder.$id = action.payload;
+      }
+    },
+    loadOrderForTracking: (state, action: PayloadAction<Order>) => {
+      state.currentOrder = action.payload;
+      state.trackingStatus = action.payload.status === "delivered"
+        ? "delivered"
+        : action.payload.status === "picked_up"
+        ? "delivering"
+        : "preparing";
+    },
     addOrderToHistory: (state, action: PayloadAction<Order>) => {
       // Avoid duplicates
       const exists = state.orderHistory.some(o => o.id === action.payload.id);
@@ -75,6 +101,8 @@ export const {
   paymentSuccess,
   paymentFailed,
   setTrackingStatus,
+  updateCurrentOrderDbId,
+  loadOrderForTracking,
   addOrderToHistory,
   setOrderHistory,
   resetPayment

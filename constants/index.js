@@ -49,6 +49,8 @@ import icedTea from "@/assets/images/iced-tea.png";
 import potatoWedges from "@/assets/images/potato-wedges.png";
 import sweetCorn from "@/assets/images/sweet-corn.png";
 import chocoLavaCake from "@/assets/images/choco-lava-cake.png";
+import rider3d from "@/assets/images/rider_3d.png";
+
 
 export const CATEGORIES = [
   {
@@ -267,4 +269,5 @@ export const images = {
   potatoWedges,
   sweetCorn,
   chocoLavaCake,
+  rider3d,
 };

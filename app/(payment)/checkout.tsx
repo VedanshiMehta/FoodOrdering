@@ -21,9 +21,13 @@ import {
   processPayment,
   paymentSuccess,
   resetPayment,
+  updateCurrentOrderDbId,
 } from "../../store/slices/orderSlice";
+import AppwriteService from "../lib/services/auth_services/appwrite";
 
 type PaymentMethodType = "card" | "wallet" | "cod";
+
+const appwrite = new AppwriteService();
 
 export default function CheckoutScreen() {
   const router = useRouter();
@@ -87,6 +91,17 @@ export default function CheckoutScreen() {
           Alert.alert("Payment Cancelled", presentError.message);
           dispatch(resetPayment());
         } else {
+          // Card payment succeeded! Create order in database immediately
+          if (currentOrder) {
+            try {
+              const doc = await appwrite.createOrder(currentOrder);
+              if (doc) {
+                dispatch(updateCurrentOrderDbId(doc.$id));
+              }
+            } catch (e) {
+              console.log("Error creating order on payment success:", e);
+            }
+          }
           dispatch(paymentSuccess());
         }
       } catch (err: any) {
@@ -96,7 +111,17 @@ export default function CheckoutScreen() {
     } else {
       // Cash on Delivery
       dispatch(processPayment());
-      setTimeout(() => {
+      setTimeout(async () => {
+        if (currentOrder) {
+          try {
+            const doc = await appwrite.createOrder(currentOrder);
+            if (doc) {
+              dispatch(updateCurrentOrderDbId(doc.$id));
+            }
+          } catch (e) {
+            console.log("Error creating COD order:", e);
+          }
+        }
         dispatch(paymentSuccess());
       }, 2000);
     }
@@ -156,10 +181,11 @@ export default function CheckoutScreen() {
         {/* Header */}
         <View className="flex-row items-center justify-between px-5 py-4 border-b border-gray-100">
           <TouchableOpacity
-            className="w-10 h-10 rounded-full border border-gray-150 items-center justify-center"
+            className="w-[42px] h-[42px] rounded-full border border-gray-100 bg-white items-center justify-center"
             onPress={() => router.back()}
+            activeOpacity={0.7}
           >
-            <Ionicons name="arrow-back" size={20} color="#1f2937" />
+            <Ionicons name="arrow-back" size={22} color="#111827" />
           </TouchableOpacity>
           <Text className="text-xl font-bold text-gray-800" style={{ fontFamily: "Quicksand-Bold" }}>
             Secure Checkout
@@ -370,7 +396,7 @@ export default function CheckoutScreen() {
                 </View>
               </View>
               <Text className="text-xs text-gray-500 leading-relaxed bg-white border border-gray-100 p-4 rounded-xl" style={{ fontFamily: "Quicksand-Medium" }}>
-                🔔 Please ensure you have the exact amount of cash ready for the courier when your order arrives. A delivery representative will contact you upon arrival at your address.
+                🔔 Please ensure you have the exact amount of cash ready for the delivery rider when your order arrives. A delivery representative will contact you upon arrival at your address.
               </Text>
             </View>
           )}

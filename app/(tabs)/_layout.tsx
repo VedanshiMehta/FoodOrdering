@@ -31,62 +31,48 @@ const TabBarIcon = ({ focused, icon, title }: TabBarIconProps) => {
 };
 
 export default function TabsLayout() {
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const { appwrite, isLoggedIn, setIsLoggedIn, setUser } =
-    useContext(AppwriteContext);
+  const { isLoggedIn, user, isLoading } = useContext(AppwriteContext);
   const dispatch = useDispatch();
 
   useEffect(() => {
-    appwrite
-      .getCurrentUser()
-      .then((response) => {
-        setIsLoading(false);
-        if (response) {
-          setIsLoggedIn(true);
-          setUser(response as User);
+    if (user?.address) {
+      const parts = user.address.split(", ");
+      let flatNo = null;
+      let mainAddress = user.address;
 
-            // Restore last saved location to Redux so it persists on reload!
-            if (response.address) {
-              const parts = response.address.split(", ");
-              let flatNo = null;
-              let mainAddress = response.address;
+      // If the first part is short and doesn't contain Street/St, it's the flat number!
+      if (
+        parts.length > 1 &&
+        !parts[0].includes("Street") &&
+        !parts[0].includes("St") &&
+        parts[0].length < 20
+      ) {
+        flatNo = parts[0];
+        mainAddress = parts.slice(1).join(", ");
+      }
 
-              // If the first part is short and doesn't contain Street/St, it's the flat number!
-              if (
-                parts.length > 1 &&
-                !parts[0].includes("Street") &&
-                !parts[0].includes("St") &&
-                parts[0].length < 20
-              ) {
-                flatNo = parts[0];
-                mainAddress = parts.slice(1).join(", ");
-              }
+      const savedLat = user.latitude ? Number(user.latitude) : 20.5992;
+      const savedLng = user.longitude ? Number(user.longitude) : 72.9342;
 
-              const savedLat = response.latitude ? Number(response.latitude) : 20.5992;
-              const savedLng = response.longitude ? Number(response.longitude) : 72.9342;
+      dispatch(
+        setLocation({
+          latitude: savedLat,
+          longitude: savedLng,
+          address: mainAddress,
+          flatHouseNo: flatNo,
+        })
+      );
+    }
+  }, [user, dispatch]);
 
-              dispatch(
-                setLocation({
-                  latitude: savedLat,
-                  longitude: savedLng,
-                  address: mainAddress,
-                  flatHouseNo: flatNo,
-                })
-              );
-            }
-        } else {
-          setIsLoggedIn(false);
-          setUser(null);
-        }
-      })
-      .catch((error) => {
-        setIsLoggedIn(false);
-        setUser(null);
-        setIsLoading(false);
-      });
-  }, [appwrite, setIsLoggedIn, setIsLoading, setUser, dispatch]);
   if (isLoading) return <Loading />;
   if (!isLoggedIn) return <Redirect href="/sign_in" />;
+
+  // Role-Based Router Redirection
+  if (user?.role === "admin") return <Redirect href="/admin" />;
+  if (user?.role === "manager" || user?.role === "hotel") return <Redirect href="/hotel" />;
+  if (user?.role === "rider" || user?.role === "delivery") return <Redirect href="/delivery" />;
+
   return (
     <Tabs
       screenOptions={{

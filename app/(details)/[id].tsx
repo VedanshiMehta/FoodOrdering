@@ -23,6 +23,7 @@ import {
   APPWRITE_DATABASE_ID,
   CUSTOMIZATIONS_COLLECTION_ID,
   MENU_CUSTOMIZATIONS_COLLECTION_ID,
+  APPWRITE_USERS_COLLECTION_ID,
 } from "../lib/services/auth_services/appwrite";
 
 const { width } = Dimensions.get("window");
@@ -42,21 +43,11 @@ const mapCustomization = (cus: any) => {
       return tNorm.includes(normalized) || normalized.includes(tNorm);
     });
 
-    if (found) {
-      return {
-        id: found.name.toLowerCase().replace(/\s+/g, "-"),
-        name: found.name,
-        image: found.image,
-        price: resolvedPrice || found.price,
-      };
-    }
-
-    // Fallback placeholder image for topping if not found in constants (using images.emptyState)
     return {
-      id: normalized.replace(/\s+/g, "-"),
-      name: name,
-      image: images.emptyState, // Generic placeholder from images object
-      price: resolvedPrice || 1.5,
+      id: found ? found.name.toLowerCase().replace(/\s+/g, "-") : normalized.replace(/\s+/g, "-"),
+      name: found ? found.name : name,
+      image: cus.image_url ? { uri: cus.image_url } : (found ? found.image : images.emptyState),
+      price: resolvedPrice || (found ? found.price : 1.5),
     };
   } else {
     // Try to find a match in the predefined static CONST_SIDES constant
@@ -65,21 +56,11 @@ const mapCustomization = (cus: any) => {
       return sNorm.includes(normalized) || normalized.includes(sNorm);
     });
 
-    if (found) {
-      return {
-        id: found.name.toLowerCase().replace(/\s+/g, "-"),
-        name: found.name,
-        image: found.image,
-        price: resolvedPrice || found.price,
-      };
-    }
-
-    // Fallback placeholder image for side if not found in constants (using images.emptyState)
     return {
-      id: normalized.replace(/\s+/g, "-"),
-      name: name,
-      image: images.emptyState, // Generic placeholder from images object
-      price: resolvedPrice || 3.0,
+      id: found ? found.name.toLowerCase().replace(/\s+/g, "-") : normalized.replace(/\s+/g, "-"),
+      name: found ? found.name : name,
+      image: cus.image_url ? { uri: cus.image_url } : (found ? found.image : images.emptyState),
+      price: resolvedPrice || (found ? found.price : 3.0),
     };
   }
 };
@@ -286,7 +267,7 @@ export default function ItemDetailsScreen() {
       {/* Header Bar */}
       <View className="flex-row items-center justify-between px-5 py-3 bg-white">
         <TouchableOpacity
-          className="w-[42px] h-[42px] rounded-full border border-gray-100 items-center justify-center"
+          className="w-[42px] h-[42px] rounded-full border border-gray-100 bg-white items-center justify-center"
           onPress={() => router.back()}
           activeOpacity={0.7}
         >
@@ -382,11 +363,11 @@ export default function ItemDetailsScreen() {
           </View>
 
           {/* Product Large Image */}
-          <View className="absolute -right-[30px] -top-[10px] z-[1] items-center justify-center" style={{ width: width * 0.58, height: width * 0.58 }}>
+          <View className="absolute -right-[30px] -top-[10px] z-[1] items-center justify-center rounded-full overflow-hidden" style={{ width: width * 0.58, height: width * 0.58 }}>
             <Image
               source={{ uri: item.image_url }}
-              className="w-full h-full"
-              resizeMode="contain"
+              className="w-full h-full rounded-full overflow-hidden"
+              resizeMode="cover"
             />
           </View>
         </View>
@@ -448,9 +429,9 @@ export default function ItemDetailsScreen() {
                       <View className="h-20 items-center justify-center bg-white p-2">
                         <Image source={topping.image} className="w-full h-full" resizeMode="contain" />
                       </View>
-                      <View className={`flex-row items-center justify-between bg-[#37302f] px-2 py-2.5 h-[38px] ${isSelected ? "bg-orange-500" : ""}`}>
-                        <Text className="text-[11px] text-white flex-1 mr-1" style={{ fontFamily: "Quicksand-Bold" }}>{topping.name}</Text>
-                        <View className={`w-4 h-4 rounded-full bg-red-500 items-center justify-center ${isSelected ? "bg-green-500" : ""}`}>
+                      <View className={`flex-row items-center justify-between bg-[#37302f] px-2 py-1.5 min-h-[38px] ${isSelected ? "bg-orange-500" : ""}`}>
+                        <Text className="text-[9.5px] text-white flex-1 mr-1 leading-3" style={{ fontFamily: "Quicksand-Bold" }}>{topping.name}</Text>
+                        <View className={`w-4 h-4 rounded-full bg-red-500 items-center justify-center shrink-0 ${isSelected ? "bg-green-500" : ""}`}>
                           <Ionicons
                             name={isSelected ? "checkmark" : "add"}
                             size={12}
@@ -499,9 +480,9 @@ export default function ItemDetailsScreen() {
                       <View className="h-20 items-center justify-center bg-white p-2">
                         <Image source={side.image} className="w-full h-full" resizeMode="contain" />
                       </View>
-                      <View className={`flex-row items-center justify-between bg-[#37302f] px-2 py-2.5 h-[38px] ${isSelected ? "bg-orange-500" : ""}`}>
-                        <Text className="text-[11px] text-white flex-1 mr-1" style={{ fontFamily: "Quicksand-Bold" }}>{side.name}</Text>
-                        <View className={`w-4 h-4 rounded-full bg-red-500 items-center justify-center ${isSelected ? "bg-green-500" : ""}`}>
+                      <View className={`flex-row items-center justify-between bg-[#37302f] px-2 py-1.5 min-h-[38px] ${isSelected ? "bg-orange-500" : ""}`}>
+                        <Text className="text-[9.5px] text-white flex-1 mr-1 leading-3" style={{ fontFamily: "Quicksand-Bold" }}>{side.name}</Text>
+                        <View className={`w-4 h-4 rounded-full bg-red-500 items-center justify-center shrink-0 ${isSelected ? "bg-green-500" : ""}`}>
                           <Ionicons
                             name={isSelected ? "checkmark" : "add"}
                             size={12}

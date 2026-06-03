@@ -1,7 +1,7 @@
 import CartContext from "@/app/lib/services/cart_services/CartContext";
 import { MenuItem } from "@/type";
 import React, { useContext } from "react";
-import { Image, Platform, Text, TouchableOpacity } from "react-native";
+import { Image, Platform, Text, TouchableOpacity, View } from "react-native";
 import { useRouter } from "expo-router";
 
 const MenuCard = ({
@@ -21,11 +21,13 @@ const MenuCard = ({
       }
       onPress={() => router.push(`/(details)/${$id}` as any)}
     >
-      <Image
-        source={{ uri: image_url }}
-        className="size-32 absolute -top-10"
-        resizeMode="contain"
-      />
+      <View className="size-32 absolute -top-10 rounded-full overflow-hidden">
+        <Image
+          source={{ uri: image_url }}
+          className="w-full h-full rounded-full overflow-hidden"
+          resizeMode="cover"
+        />
+      </View>
       <Text
         className="text-center base-bold text-dark-100 mb-2"
         numberOfLines={1}

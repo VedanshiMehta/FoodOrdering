@@ -19,30 +19,27 @@ const SignUp = () => {
     const { name, email, password } = form;
     if (!name || !email || !password)
       return utils.showAlert(
-        "Please enter valid name,email and password ",
+        "Please enter valid name, email and password",
         "Error",
       );
     if (password.length < 8)
       return utils.showAlert("Password must be 8 characters long", "Error");
     setIsSubmitting(true);
     try {
-      appwrite
-        .createAccount({
-          name: name,
-          email: email,
-          password: password,
-        })
-        .then((response) => {
-          if (response) {
-            setIsLoggedIn(true);
-            appwrite.getCurrentUser().then((userResponse) => {
-              if (userResponse) {
-                setUser(userResponse as User);
-              }
-            });
-            router.replace("/");
-          }
-        });
+      const response = await appwrite.createAccount({
+        name: name,
+        email: email,
+        password: password,
+        role: "customer",
+      });
+      if (response) {
+        const userResponse = await appwrite.getCurrentUser();
+        if (userResponse) {
+          setUser(userResponse as User);
+        }
+        setIsLoggedIn(true);
+        router.replace("/");
+      }
     } catch (error) {
       utils.showAlert(String(error), "Error");
     } finally {
@@ -50,7 +47,7 @@ const SignUp = () => {
     }
   };
   return (
-    <View className="gap-10 bg-white rounded-lg p-5 mt-5">
+    <View className="gap-6 bg-white rounded-lg p-5 mt-5">
       <CustomInput
         placeholder="Enter your name"
         label="Full Name"
@@ -76,8 +73,9 @@ const SignUp = () => {
         }
         secureTextEntry={true}
       />
+
       <CustomButton title="Sign Up" isLoading={isSubmitting} onPress={submit} />
-      <View className="flex justify-center mt-5 flex-row gap-2">
+      <View className="flex justify-center mt-2 flex-row gap-2">
         <Text className="base-regular text-gray-100">
           Already have an account?
         </Text>

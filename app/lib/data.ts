@@ -6,6 +6,7 @@ const dummyData = {
     { name: "Sandwiches", description: "Stacked and stuffed sandwiches" },
     { name: "Wraps", description: "Rolled up wraps packed with flavor" },
     { name: "Bowls", description: "Balanced rice and protein bowls" },
+    { name: "Desserts", description: "Sweet delights and treats" },
   ],
 
   customizations: [
