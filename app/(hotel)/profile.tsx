@@ -14,6 +14,10 @@ import {
   Platform,
   Image,
 } from "react-native";
+import DateTimePicker, {
+  DateTimePickerAndroid,
+  DateTimePickerEvent,
+} from "@react-native-community/datetimepicker";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import AppwriteContext from "../lib/services/auth_services/AppwirteContext";
 import { APPWRITE_DATABASE_ID, APPWRITE_USERS_COLLECTION_ID } from "../lib/services/auth_services/appwrite";
@@ -93,6 +97,17 @@ const extractAddressOnly = (fullAddress: string) => {
   return fullAddress;
 };
 
+const parseDateString = (dateStr: string | undefined | null, fallbackHours: number) => {
+  if (!dateStr) return new Date(new Date().setHours(fallbackHours, 0, 0, 0));
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return new Date(new Date().setHours(fallbackHours, 0, 0, 0));
+  return d;
+};
+
+const formatTimeOnly = (dateObj: Date) => {
+  return dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+};
+
 export default function ProfileScreen() {
   const { appwrite, setIsLoggedIn, setUser, user } = useContext(AppwriteContext);
   const router = useRouter();
@@ -142,7 +157,47 @@ export default function ProfileScreen() {
     contactNumber: user?.phoneNumber || "",
     latitude: user?.latitude || "20.5992",
     longitude: user?.longitude || "72.9342",
+    openTime: parseDateString(user?.openTime, 10),
+    closeTime: parseDateString(user?.closeTime, 23),
   });
+
+  const [showOpenPicker, setShowOpenPicker] = useState(false);
+  const [showClosePicker, setShowClosePicker] = useState(false);
+
+  const updateOpenTime = (
+    event: DateTimePickerEvent,
+    selectedTime?: Date,
+  ) => {
+    if (event.type === "dismissed" || !selectedTime) return;
+    setProfileForm((prev) => ({ ...prev, openTime: selectedTime }));
+  };
+
+  const updateCloseTime = (
+    event: DateTimePickerEvent,
+    selectedTime?: Date,
+  ) => {
+    if (event.type === "dismissed" || !selectedTime) return;
+    setProfileForm((prev) => ({ ...prev, closeTime: selectedTime }));
+  };
+
+  const openNativeTimePicker = (type: "open" | "close") => {
+    const value = type === "open" ? profileForm.openTime : profileForm.closeTime;
+    const onChange = type === "open" ? updateOpenTime : updateCloseTime;
+
+    if (Platform.OS === "android") {
+      DateTimePickerAndroid.open({
+        value,
+        mode: "time",
+        display: "default",
+        is24Hour: false,
+        onChange,
+      });
+      return;
+    }
+
+    setShowOpenPicker(type === "open");
+    setShowClosePicker(type === "close");
+  };
 
   const fetchBranches = async () => {
     if (!user?.$id) return;
@@ -186,6 +241,8 @@ export default function ProfileScreen() {
         contactNumber: user.phoneNumber || "",
         latitude: user.latitude || "20.5992",
         longitude: user.longitude || "72.9342",
+        openTime: parseDateString(user.openTime, 10),
+        closeTime: parseDateString(user.closeTime, 23),
       });
       setMapContactNumber(user.phoneNumber || "");
       fetchBranches();
@@ -203,6 +260,8 @@ export default function ProfileScreen() {
         contactNumber: user.phoneNumber || "",
         latitude: user.latitude || "20.5992",
         longitude: user.longitude || "72.9342",
+        openTime: parseDateString(user.openTime, 10),
+        closeTime: parseDateString(user.closeTime, 23),
       });
       setFormBranches([...branches]);
     }
@@ -213,7 +272,7 @@ export default function ProfileScreen() {
       await appwrite.logout();
       setIsLoggedIn(false);
       setUser(null);
-      router.replace("/sign_in" as any);
+      router.replace("/(auth)/sign_in" as any);
     } catch (err) {
       Alert.alert("Logout Error", "Failed to sign out safely.");
     }
@@ -308,6 +367,8 @@ export default function ProfileScreen() {
           phoneNumber: contactNumber,
           latitude: String(latitude),
           longitude: String(longitude),
+          openTime: profileForm.openTime.toISOString(),
+          closeTime: profileForm.closeTime.toISOString(),
         },
       });
 
@@ -357,6 +418,8 @@ export default function ProfileScreen() {
         phoneNumber: contactNumber,
         latitude: String(latitude),
         longitude: String(longitude),
+        openTime: profileForm.openTime.toISOString(),
+        closeTime: profileForm.closeTime.toISOString(),
       };
       setUser(updatedUser as any);
 
@@ -416,6 +479,12 @@ export default function ProfileScreen() {
             icon="location-outline"
             label="Address"
             value={user?.address || "No location stored."}
+            isLast={false}
+          />
+          <InfoRow
+            icon="time-outline"
+            label="Operating Hours"
+            value={`Open: ${formatTimeOnly(parseDateString(user?.openTime, 10))} - ${formatTimeOnly(parseDateString(user?.closeTime, 23))}`}
             isLast={branches.length === 0}
           />
           {branches.map((branch, index) => (
@@ -516,6 +585,33 @@ export default function ProfileScreen() {
                     placeholder="Enter phone number"
                     placeholderTextColor="#9ca3af"
                   />
+                </View>
+              </View>
+
+              {/* Timing Fields */}
+              <View style={{ flexDirection: "row", gap: 12, marginBottom: 16 }}>
+                <View style={[styles.inputContainer, { flex: 1, marginBottom: 0 }]}>
+                  <Text style={styles.inputLabel}>Opening Time</Text>
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    style={styles.inputWrapper}
+                    onPress={() => openNativeTimePicker("open")}
+                  >
+                    <Ionicons name="time-outline" size={18} color="#f97316" style={styles.inputIcon} />
+                    <Text style={{ color: "#111827", flex: 1 }}>{formatTimeOnly(profileForm.openTime)}</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View style={[styles.inputContainer, { flex: 1, marginBottom: 0 }]}>
+                  <Text style={styles.inputLabel}>Closing Time</Text>
+                  <TouchableOpacity
+                    activeOpacity={0.8}
+                    style={styles.inputWrapper}
+                    onPress={() => openNativeTimePicker("close")}
+                  >
+                    <Ionicons name="time-outline" size={18} color="#f97316" style={styles.inputIcon} />
+                    <Text style={{ color: "#111827", flex: 1 }}>{formatTimeOnly(profileForm.closeTime)}</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
 
@@ -824,6 +920,77 @@ export default function ProfileScreen() {
                 </View>
               </View>
             </Modal>
+
+            {Platform.OS === "ios" && (
+              <Modal
+                visible={showOpenPicker || showClosePicker}
+                transparent
+                animationType="slide"
+                onRequestClose={() => {
+                  setShowOpenPicker(false);
+                  setShowClosePicker(false);
+                }}
+              >
+                <View style={styles.timePickerBackdrop}>
+                  <TouchableOpacity
+                    style={styles.timePickerDismissArea}
+                    activeOpacity={1}
+                    onPress={() => {
+                      setShowOpenPicker(false);
+                      setShowClosePicker(false);
+                    }}
+                  />
+                  <View style={styles.timePickerSheet}>
+                    <View style={styles.timePickerHeader}>
+                      <TouchableOpacity
+                        onPress={() => {
+                          setShowOpenPicker(false);
+                          setShowClosePicker(false);
+                        }}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={styles.timePickerActionText}>Cancel</Text>
+                      </TouchableOpacity>
+                      <Text style={styles.timePickerTitle}>
+                        {showOpenPicker ? "Opening Time" : "Closing Time"}
+                      </Text>
+                      <TouchableOpacity
+                        onPress={() => {
+                          setShowOpenPicker(false);
+                          setShowClosePicker(false);
+                        }}
+                        activeOpacity={0.8}
+                      >
+                        <Text
+                          style={[
+                            styles.timePickerActionText,
+                            styles.timePickerDoneText,
+                          ]}
+                        >
+                          Done
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    <DateTimePicker
+                      value={
+                        showOpenPicker
+                          ? profileForm.openTime
+                          : profileForm.closeTime
+                      }
+                      mode="time"
+                      display="spinner"
+                      themeVariant="light"
+                      textColor="#111827"
+                      onChange={
+                        showOpenPicker ? updateOpenTime : updateCloseTime
+                      }
+                      style={styles.iosTimePicker}
+                    />
+                  </View>
+                </View>
+              </Modal>
+            )}
           </View>
         </View>
       </Modal>
@@ -1075,6 +1242,46 @@ const styles = StyleSheet.create({
   },
   lockIcon: {
     marginLeft: 8,
+  },
+  timePickerBackdrop: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.25)",
+  },
+  timePickerDismissArea: {
+    flex: 1,
+  },
+  timePickerSheet: {
+    backgroundColor: "#fff",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingTop: 12,
+    paddingBottom: 28,
+  },
+  timePickerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f3f4f6",
+  },
+  timePickerActionText: {
+    fontSize: 15,
+    fontFamily: "Quicksand-Bold",
+    color: "#6b7280",
+  },
+  timePickerDoneText: {
+    color: "#f97316",
+  },
+  timePickerTitle: {
+    fontSize: 16,
+    fontFamily: "Quicksand-Bold",
+    color: "#111827",
+  },
+  iosTimePicker: {
+    height: 216,
   },
   saveButton: {
     backgroundColor: "#f97316",

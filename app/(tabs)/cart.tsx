@@ -18,6 +18,7 @@ import {
   APPWRITE_DATABASE_ID,
   APPWRITE_USERS_COLLECTION_ID,
 } from "../lib/services/auth_services/appwrite";
+import { formatPrice } from "../lib/currency";
 
 const PaymentInfoStripe = ({
   label,
@@ -38,7 +39,7 @@ const Cart = () => {
   const dispatch = useDispatch();
   const { items, getTotalItems, getTotalPrice } = useContext(CartContext);
   const { user, appwrite } = useContext(AppwriteContext);
-  const { address, flatHouseNo, latitude, longitude } = useSelector(
+  const { address, flatHouseNo, latitude, longitude, countryCode } = useSelector(
     (state: RootState) => state.location,
   );
   const router = useRouter();
@@ -128,7 +129,7 @@ const Cart = () => {
         "Location Required",
         "Please select a delivery location before placing your order.",
         [
-          { text: "Select Location", onPress: () => router.push("/select-location" as any) },
+          { text: "Select Location", onPress: () => router.push("/(maps)/select-location" as any) },
           { text: "Cancel", style: "cancel" }
         ]
       );
@@ -165,7 +166,7 @@ const Cart = () => {
       userLong: longitude ? String(longitude) : undefined,
     }));
 
-    router.push("/checkout" as any);
+    router.push("/(payment)/checkout" as any);
   };
 
   return (
@@ -201,7 +202,7 @@ const Cart = () => {
                   title="Change Location"
                   style="location-btn"
                   textStyle="location-btn-text"
-                  onPress={() => router.push("/select-location" as any)}
+                  onPress={() => router.push("/(maps)/select-location" as any)}
                 />
               </View>
 
@@ -296,18 +297,18 @@ const Cart = () => {
                 </Text>
                 <PaymentInfoStripe
                   label={`Total Items (${totalItems})`}
-                  value={`$${totalPrice.toFixed(2)}`}
+                  value={formatPrice(totalPrice, countryCode)}
                 />
-                <PaymentInfoStripe label={`Delivery Fee`} value={`$5.00`} />
+                <PaymentInfoStripe label={`Delivery Fee`} value={formatPrice(5, countryCode)} />
                 <PaymentInfoStripe
                   label={`Discount`}
-                  value={`- $0.50`}
+                  value={`- ${formatPrice(0.5, countryCode)}`}
                   valueStyle="!text-success"
                 />
                 <View className="border-t border-gray-300 my-2" />
                 <PaymentInfoStripe
                   label={`Total`}
-                  value={`$${(totalPrice + 5 - 0.5).toFixed(2)}`}
+                  value={formatPrice(totalPrice + 5 - 0.5, countryCode)}
                   labelStyle="base-bold !text-dark-100"
                   valueStyle="base-bold !text-dark-100 !text-right"
                 />

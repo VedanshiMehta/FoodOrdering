@@ -5,6 +5,7 @@ export interface LocationState {
   longitude: number | null;
   address: string | null;
   flatHouseNo: string | null;
+  countryCode: string | null;
 }
 
 const initialState: LocationState = {
@@ -12,6 +13,7 @@ const initialState: LocationState = {
   longitude: null,
   address: null,
   flatHouseNo: null,
+  countryCode: null,
 };
 
 export const locationSlice = createSlice({
@@ -23,12 +25,14 @@ export const locationSlice = createSlice({
       state.longitude = action.payload.longitude;
       state.address = action.payload.address;
       state.flatHouseNo = action.payload.flatHouseNo;
+      state.countryCode = action.payload.countryCode;
     },
     clearLocation: (state) => {
       state.latitude = null;
       state.longitude = null;
       state.address = null;
       state.flatHouseNo = null;
+      state.countryCode = null;
     },
   },
 });

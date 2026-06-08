@@ -8,7 +8,7 @@ const CartButton = () => {
   const { getTotalItems } = useContext(CartContext);
   const totalItems = getTotalItems(); // Example total items in the cart
   return (
-    <TouchableOpacity className="cart-btn" onPress={() => router.push("/cart")}>
+    <TouchableOpacity className="cart-btn" onPress={() => router.push("/(tabs)/cart")}>
       <Image source={images.bag} className="size-5" resizeMode="contain" />
       {totalItems > 0 && (
         <View className="cart-badge">

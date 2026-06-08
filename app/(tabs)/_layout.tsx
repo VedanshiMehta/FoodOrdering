@@ -8,6 +8,7 @@ import { Image, Text, View } from "react-native";
 import AppwriteContext from "../lib/services/auth_services/AppwirteContext";
 import { useDispatch } from "react-redux";
 import { setLocation } from "../../store/slices/locationSlice";
+import * as Location from "expo-location";
 
 const TabBarIcon = ({ focused, icon, title }: TabBarIconProps) => {
   return (
@@ -51,27 +52,54 @@ export default function TabsLayout() {
         mainAddress = parts.slice(1).join(", ");
       }
 
-      const savedLat = user.latitude ? Number(user.latitude) : 20.5992;
-      const savedLng = user.longitude ? Number(user.longitude) : 72.9342;
+      const parsedLat = Number(user.latitude);
+      const parsedLng = Number(user.longitude);
+      const savedLat = !isNaN(parsedLat) && user.latitude ? parsedLat : 20.5992;
+      const savedLng = !isNaN(parsedLng) && user.longitude ? parsedLng : 72.9342;
 
-      dispatch(
-        setLocation({
-          latitude: savedLat,
-          longitude: savedLng,
-          address: mainAddress,
-          flatHouseNo: flatNo,
-        })
-      );
+      (async () => {
+        let countryCode = null;
+        const addrLower = (user.address || "").toLowerCase();
+        if (addrLower.includes("india") || addrLower.includes("gujarat") || addrLower.includes("in")) {
+          countryCode = "IN";
+        } else if (addrLower.includes("usa") || addrLower.includes("united states") || addrLower.includes("us")) {
+          countryCode = "US";
+        }
+        try {
+          const { status } = await Location.getForegroundPermissionsAsync();
+          if (status === "granted") {
+            const geocode = await Location.reverseGeocodeAsync({
+              latitude: savedLat,
+              longitude: savedLng,
+            });
+            if (geocode.length > 0) {
+              countryCode = geocode[0].isoCountryCode || null;
+            }
+          }
+        } catch (e) {
+          console.warn("Failed to reverse geocode user location on mount", e);
+        }
+
+        dispatch(
+          setLocation({
+            latitude: savedLat,
+            longitude: savedLng,
+            address: mainAddress,
+            flatHouseNo: flatNo,
+            countryCode,
+          })
+        );
+      })();
     }
   }, [user, dispatch]);
 
   if (isLoading) return <Loading />;
-  if (!isLoggedIn) return <Redirect href="/sign_in" />;
+  if (!isLoggedIn) return <Redirect href={"/(auth)/sign_in" as any} />;
 
   // Role-Based Router Redirection
-  if (user?.role === "admin") return <Redirect href="/admin" />;
-  if (user?.role === "manager" || user?.role === "hotel") return <Redirect href="/hotel" />;
-  if (user?.role === "rider" || user?.role === "delivery") return <Redirect href="/delivery" />;
+  if (user?.role === "admin") return <Redirect href={"/(admin)" as any} />;
+  if (user?.role === "manager" || user?.role === "hotel") return <Redirect href={"/(hotel)" as any} />;
+  if (user?.role === "rider" || user?.role === "delivery") return <Redirect href={"/(delivery)" as any} />;
 
   return (
     <Tabs

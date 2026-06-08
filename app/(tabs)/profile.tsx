@@ -14,15 +14,17 @@ import {
   Alert,
   Platform,
   Dimensions,
+  KeyboardAvoidingView,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useDispatch, useSelector } from "react-redux";
 import { setOrderHistory, loadOrderForTracking, Order } from "../../store/slices/orderSlice";
 import { RootState } from "../../store/store";
 import AppwriteContext from "../lib/services/auth_services/AppwirteContext";
-import { useRouter, useLocalSearchParams } from "expo-router";
+import { useRouter, useGlobalSearchParams } from "expo-router";
 import MapView, { PROVIDER_GOOGLE } from "react-native-maps";
 import { useLocationSetup } from "../../hooks/useLocationSetup";
+import { formatPrice } from "../lib/currency";
 import { APPWRITE_DATABASE_ID, APPWRITE_USERS_COLLECTION_ID } from "../lib/services/auth_services/appwrite";
 
 const { height } = Dimensions.get("window");
@@ -108,11 +110,19 @@ export default function ProfileTab() {
 
   // Redux states
   const { orderHistory } = useSelector((state: RootState) => state.order);
+  const countryCode = useSelector((state: RootState) => state.location.countryCode);
 
   // Modal Sheet state
-  const { showHistory } = useLocalSearchParams<{ showHistory?: string }>();
+  const { showHistory } = useGlobalSearchParams<{ showHistory?: string }>();
   const [historyModalVisible, setHistoryModalVisible] = useState(false);
   const [loadingOrders, setLoadingOrders] = useState(false);
+
+  // Rating states
+  const [ratingOrder, setRatingOrder] = useState<Order | null>(null);
+  const [ratingModalVisible, setRatingModalVisible] = useState(false);
+  const [currentRating, setCurrentRating] = useState(0);
+  const [ratingComment, setRatingComment] = useState("");
+  const [isSubmittingRating, setIsSubmittingRating] = useState(false);
 
   useEffect(() => {
     if (showHistory === "true") {
@@ -518,7 +528,47 @@ export default function ProfileTab() {
     if (order.status !== "delivered") {
       setHistoryModalVisible(false);
       dispatch(loadOrderForTracking(order));
-      router.push("/tracking" as any);
+      router.push("/(payment)/tracking" as any);
+    } else if (!order.rating) {
+      setRatingOrder(order);
+      setCurrentRating(0);
+      setRatingComment("");
+      setRatingModalVisible(true);
+    }
+  };
+
+  const submitRating = async () => {
+    if (!ratingOrder || currentRating === 0) {
+      Alert.alert("Missing Rating", "Please select at least 1 star to submit your rating.");
+      return;
+    }
+    
+    setIsSubmittingRating(true);
+    try {
+      const success = await appwrite.submitOrderRating(
+        ratingOrder.$id!,
+        currentRating,
+        ratingComment.trim(),
+        ratingOrder.items
+      );
+
+      if (success) {
+        Alert.alert("Rating Submitted!", "Thank you for your feedback.");
+        setRatingModalVisible(false);
+        // Refresh orders locally
+        const updatedOrders = orderHistory.map(o => 
+          o.id === ratingOrder.id 
+            ? { ...o, rating: currentRating, comment: ratingComment }
+            : o
+        );
+        dispatch(setOrderHistory(updatedOrders));
+      } else {
+        Alert.alert("Error", "Failed to submit rating. Please try again.");
+      }
+    } catch (error) {
+      Alert.alert("Error", "An unexpected error occurred.");
+    } finally {
+      setIsSubmittingRating(false);
     }
   };
 
@@ -673,7 +723,7 @@ export default function ProfileTab() {
                 return (
                   <CardContainer
                     style={styles.orderCard}
-                    onPress={isPending ? () => handleOrderPress(item) : undefined}
+                    onPress={isPending || (!isPending && !item.rating) ? () => handleOrderPress(item) : undefined}
                     activeOpacity={0.8}
                   >
                     {/* Header */}
@@ -740,7 +790,7 @@ export default function ProfileTab() {
                             {cartItem.name}
                           </Text>
                           <Text style={styles.itemPrice}>
-                            ${(cartItem.price * cartItem.quantity).toFixed(2)}
+                            {formatPrice(cartItem.price * cartItem.quantity, countryCode)}
                           </Text>
                         </View>
                       ))}
@@ -760,7 +810,7 @@ export default function ProfileTab() {
                       </View>
                       <View style={{ alignItems: "flex-end", gap: 2 }}>
                         <Text style={styles.totalPrice}>
-                          Total: ${item.total.toFixed(2)}
+                          Total: {formatPrice(item.total, countryCode)}
                         </Text>
                         {isPending && (
                           <View style={{ flexDirection: "row", alignItems: "center", gap: 3, marginTop: 4 }}>
@@ -770,6 +820,34 @@ export default function ProfileTab() {
                             </Text>
                           </View>
                         )}
+                        {!isPending && (
+                          <TouchableOpacity 
+                            onPress={() => handleOrderPress(item)}
+                            activeOpacity={0.8}
+                            disabled={!!item.rating}
+                            style={{ 
+                              flexDirection: "row", 
+                              alignItems: "center", 
+                              gap: 3, 
+                              marginTop: 6,
+                              paddingVertical: 4,
+                              paddingHorizontal: 10,
+                              borderRadius: 12,
+                              backgroundColor: item.rating ? "#fff7ed" : "#f97316",
+                              borderWidth: 1,
+                              borderColor: item.rating ? "#fdba74" : "#ea580c"
+                            }}
+                          >
+                            <Ionicons 
+                              name="star" 
+                              size={12} 
+                              color={item.rating ? "#f97316" : "#fff"} 
+                            />
+                            <Text style={{ fontFamily: "Quicksand-Bold", fontSize: 10, color: item.rating ? "#f97316" : "#fff" }}>
+                              {item.rating ? `${item.rating} Stars` : "Rate Order"}
+                            </Text>
+                          </TouchableOpacity>
+                        )}
                       </View>
                     </View>
                   </CardContainer>
@@ -778,9 +856,73 @@ export default function ProfileTab() {
             />
           )}
         </SafeAreaView>
-      </Modal>
 
-      {/* Edit Profile Modal */}
+        {/* Rating BottomSheet Modal - NESTED inside History Modal to support dual overlays on iOS! */}
+        <Modal
+          visible={ratingModalVisible}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setRatingModalVisible(false)}
+        >
+          <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
+            <View style={styles.modalOverlay}>
+              <View style={styles.sheetContainer}>
+                <View style={styles.dragHandle} />
+                <View style={styles.sheetHeader}>
+                  <Text style={styles.sheetTitle}>Rate Your Order</Text>
+                  <TouchableOpacity
+                    style={styles.sheetCloseButton}
+                    onPress={() => setRatingModalVisible(false)}
+                  >
+                    <Ionicons name="close" size={20} color="#4b5563" />
+                  </TouchableOpacity>
+                </View>
+
+                <View style={{ alignItems: "center", marginBottom: 20 }}>
+                  <Text style={{ fontFamily: "Quicksand-Medium", fontSize: 15, color: "#6b7280", marginBottom: 16 }}>
+                    How was your food? Let us know!
+                  </Text>
+                  <View style={{ flexDirection: "row", gap: 8 }}>
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <TouchableOpacity key={star} onPress={() => setCurrentRating(star)} activeOpacity={0.8}>
+                        <Ionicons
+                          name={star <= currentRating ? "star" : "star-outline"}
+                          size={40}
+                          color={star <= currentRating ? "#f97316" : "#d1d5db"}
+                        />
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
+                <View style={[styles.detailInputWrapper, { height: 100 }]}>
+                  <TextInput
+                    style={[styles.detailInput, { height: '100%', textAlignVertical: "top", paddingTop: 14 }]}
+                    placeholder="Write your comment here... (optional)"
+                    placeholderTextColor="#9ca3af"
+                    value={ratingComment}
+                    onChangeText={setRatingComment}
+                    multiline={true}
+                  />
+                </View>
+
+                <TouchableOpacity
+                  style={mapStyles.confirmButton}
+                  onPress={submitRating}
+                  activeOpacity={0.85}
+                  disabled={isSubmittingRating}
+                >
+                  {isSubmittingRating ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={mapStyles.confirmButtonText}>Submit Rating</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
+      </Modal>
       <Modal
         visible={editModalVisible}
         animationType="slide"
@@ -1247,6 +1389,7 @@ export default function ProfileTab() {
           </View>
         </View>
       </Modal>
+
     </SafeAreaView>
   );
 }

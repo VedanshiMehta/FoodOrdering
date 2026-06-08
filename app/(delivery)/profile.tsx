@@ -16,6 +16,9 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import AppwriteContext from "../lib/services/auth_services/AppwirteContext";
 import useAppwrite from "../lib/services/appwrite_data_services/useApprwriteData";
 import { DeliveryContext } from "./_layout";
+import { useSelector } from "react-redux";
+import { RootState } from "../../store/store";
+import { formatPrice } from "../lib/currency";
 
 // Reusable custom profile detail row styled with Tailwind CSS
 interface InfoRowProps {
@@ -65,6 +68,7 @@ export default function RiderProfileScreen() {
   const insets = useSafeAreaInsets();
   const { appwrite, setIsLoggedIn, setUser, user } = useContext(AppwriteContext);
   const { setSelectedOrderForMap, setCustomerCoords, setMapOriginTab } = useContext(DeliveryContext);
+  const countryCode = useSelector((state: RootState) => state.location.countryCode);
 
   // Fetch all orders dynamically to compute statistics and history
   const { data: ordersData, refetch: refetchOrders, loading: ordersLoading } = useAppwrite({
@@ -79,7 +83,7 @@ export default function RiderProfileScreen() {
   );
 
   const [deliveredHistory, setDeliveredHistory] = useState<any[]>([]);
-  const [activePickups, setActivePickups] = useState<any[]>([]);
+  const [pickupHistory, setPickupHistory] = useState<any[]>([]);
   const [stats, setStats] = useState({
     completedCount: 0,
     activeCount: 0,
@@ -88,7 +92,7 @@ export default function RiderProfileScreen() {
 
   // Modal display states
   const [historyModalVisible, setHistoryModalVisible] = useState(false);
-  const [activeModalVisible, setActiveModalVisible] = useState(false);
+  const [pickupModalVisible, setPickupModalVisible] = useState(false);
 
   useEffect(() => {
     if (ordersData) {
@@ -100,7 +104,10 @@ export default function RiderProfileScreen() {
       // Filter active picked up orders for this rider
       const activeList = ordersData.filter((o) => o.status === "picked_up" && (user?.$id ? o.deliveryBoyId === user?.$id : true));
       activeList.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-      setActivePickups(activeList);
+      
+      const combinedPickups = [...activeList, ...deliveredList];
+      combinedPickups.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      setPickupHistory(combinedPickups);
 
       // Compute simple stats: total pickups = active + completed
       setStats({
@@ -141,7 +148,7 @@ export default function RiderProfileScreen() {
     }
 
     setMapOriginTab("active");
-    router.push({ pathname: "/delivery/map" } as any);
+    router.push({ pathname: "/(delivery)/map" } as any);
   };
 
   const formatDate = (dateStr: string) => {
@@ -241,10 +248,10 @@ export default function RiderProfileScreen() {
 
           {/* Rider Statistics Horizontal Grid */}
           <View className="flex-row gap-3">
-            {/* Active Pickups Stat Card (Clickable to open active pickups page) */}
+            {/* Pickup History Stat Card (Clickable to open pickup history page) */}
             <TouchableOpacity
               className="flex-1 bg-white rounded-[20px] p-5 shadow-sm shadow-black/5 items-center justify-center gap-1.5"
-              onPress={() => setActiveModalVisible(true)}
+              onPress={() => setPickupModalVisible(true)}
               activeOpacity={0.7}
             >
               <View className="w-10 h-10 rounded-2xl bg-blue-50 items-center justify-center mb-1 shadow-sm shadow-blue-500/5">
@@ -284,7 +291,7 @@ export default function RiderProfileScreen() {
                 Earnings
               </Text>
               <Text className="text-xl font-bold text-gray-800" style={{ fontFamily: "Quicksand-Bold" }}>
-                ${stats.earnings.toFixed(2)}
+                {formatPrice(stats.earnings, countryCode)}
               </Text>
             </View>
           </View>
@@ -371,7 +378,7 @@ export default function RiderProfileScreen() {
                           {cartItem.quantity}x <Text className="text-gray-700">{cartItem.name}</Text>
                         </Text>
                         <Text className="text-xs text-gray-700 font-bold" style={{ fontFamily: "Quicksand-Bold" }}>
-                          ${(cartItem.price * cartItem.quantity).toFixed(2)}
+                          {formatPrice(cartItem.price * cartItem.quantity, countryCode)}
                         </Text>
                       </View>
                     ))}
@@ -386,7 +393,7 @@ export default function RiderProfileScreen() {
                       </Text>
                     </View>
                     <Text className="text-xs font-bold text-orange-500" style={{ fontFamily: "Quicksand-Bold" }}>
-                      Total: ${item.total.toFixed(2)}
+                      Total: {formatPrice(item.total, countryCode)}
                     </Text>
                   </View>
                 </View>
@@ -396,43 +403,43 @@ export default function RiderProfileScreen() {
         </SafeAreaView>
       </Modal>
 
-      {/* 2. Active Pickups Full Screen Page Screen */}
+      {/* 2. Pickup History Full Screen Page Screen */}
       <Modal
-        visible={activeModalVisible}
+        visible={pickupModalVisible}
         animationType="slide"
         transparent={false}
-        onRequestClose={() => setActiveModalVisible(false)}
+        onRequestClose={() => setPickupModalVisible(false)}
       >
         <SafeAreaView className="flex-1 bg-gray-50" edges={["top"]}>
           {/* Custom Navigation Header */}
           <View style={{ paddingTop: Math.max(insets.top, Platform.OS === 'ios' ? 44 : 24) }} className="flex-row items-center justify-between px-5 pb-4 bg-transparent">
             <TouchableOpacity
-              onPress={() => setActiveModalVisible(false)}
+              onPress={() => setPickupModalVisible(false)}
               activeOpacity={0.7}
               className="w-[42px] h-[42px] rounded-full border border-gray-100 bg-white items-center justify-center"
             >
               <Ionicons name="arrow-back" size={22} color="#111827" />
             </TouchableOpacity>
             <Text className="text-base font-bold text-gray-800" style={{ fontFamily: "Quicksand-Bold" }}>
-              Active Pickups ({activePickups.length})
+              Pickup History ({pickupHistory.length})
             </Text>
             <View className="w-6" />
           </View>
 
           {/* List Content */}
-          {activePickups.length === 0 ? (
+          {pickupHistory.length === 0 ? (
             <View className="flex-1 items-center justify-center p-5 gap-2 bg-gray-50">
               <Ionicons name="bicycle" size={48} color="#d1d5db" />
               <Text className="text-sm font-bold text-gray-500 mt-2" style={{ fontFamily: "Quicksand-Bold" }}>
-                No active pickups found.
+                No pickups found.
               </Text>
               <Text className="text-xs text-gray-400 text-center" style={{ fontFamily: "Quicksand-Medium" }}>
-                Orders you are actively delivering will appear here.
+                Orders you have picked up will appear here.
               </Text>
             </View>
           ) : (
             <FlatList
-              data={activePickups}
+              data={pickupHistory}
               keyExtractor={(item) => item.$id}
               showsVerticalScrollIndicator={false}
               contentContainerStyle={{ padding: 20 }}
@@ -448,10 +455,10 @@ export default function RiderProfileScreen() {
                         {formatDate(item.timestamp)}
                       </Text>
                     </View>
-                    <View className="px-2.5 py-1 bg-orange-50 rounded-full flex-row items-center gap-1">
-                      <Ionicons name="bicycle" size={10} color="#f97316" />
-                      <Text className="text-[9px] font-bold text-orange-600 uppercase" style={{ fontFamily: "Quicksand-Bold" }}>
-                        In Transit
+                    <View className={`px-2.5 py-1 rounded-full flex-row items-center gap-1 ${item.status === 'delivered' ? 'bg-green-50' : 'bg-orange-50'}`}>
+                      <Ionicons name={item.status === 'delivered' ? 'checkmark-circle' : 'bicycle'} size={10} color={item.status === 'delivered' ? '#10b981' : '#f97316'} />
+                      <Text className={`text-[9px] font-bold uppercase ${item.status === 'delivered' ? 'text-green-600' : 'text-orange-600'}`} style={{ fontFamily: "Quicksand-Bold" }}>
+                        {item.status === 'delivered' ? 'Delivered' : 'In Transit'}
                       </Text>
                     </View>
                   </View>
@@ -464,36 +471,32 @@ export default function RiderProfileScreen() {
                           {cartItem.quantity}x <Text className="text-gray-700">{cartItem.name}</Text>
                         </Text>
                         <Text className="text-xs text-gray-700 font-bold" style={{ fontFamily: "Quicksand-Bold" }}>
-                          ${(cartItem.price * cartItem.quantity).toFixed(2)}
+                          {formatPrice(cartItem.price * cartItem.quantity, countryCode)}
                         </Text>
                       </View>
                     ))}
                   </View>
 
                   {/* Footer Address & Price */}
-                  <View className="flex-row justify-between items-center mt-1 mb-4">
-                    <View className="flex-row items-center gap-1.5 flex-1 mr-4">
-                      <Ionicons name="location-outline" size={14} color="#f97316" />
-                      <Text className="text-[10px] text-gray-500 flex-1" numberOfLines={1} style={{ fontFamily: "Quicksand-Medium" }}>
-                        {item.address}
-                      </Text>
+                  <View className="flex-row justify-between items-start mt-1 mb-4 gap-2">
+                    <View className="flex-col gap-1.5 flex-1">
+                      <View className="flex-row items-center gap-1.5">
+                        <Ionicons name="restaurant" size={12} color="#4b5563" />
+                        <Text className="text-[11px] text-gray-700 font-bold" numberOfLines={1} style={{ fontFamily: "Quicksand-Bold" }}>
+                          {item.pickupBranchName || "Hotel Location"}
+                        </Text>
+                      </View>
+                      <View className="flex-row items-start gap-1.5">
+                        <Ionicons name="location-outline" size={14} color="#f97316" />
+                        <Text className="text-[10px] text-gray-500 flex-1" numberOfLines={2} style={{ fontFamily: "Quicksand-Medium" }}>
+                          {item.pickupBranchAddress || "No address provided"}
+                        </Text>
+                      </View>
                     </View>
-                    <Text className="text-xs font-bold text-orange-500" style={{ fontFamily: "Quicksand-Bold" }}>
-                      Total: ${item.total.toFixed(2)}
+                    <Text className="text-xs font-bold text-orange-500 mt-0.5" style={{ fontFamily: "Quicksand-Bold" }}>
+                      Total: {formatPrice(item.total, countryCode)}
                     </Text>
                   </View>
-
-                  {/* Direct Tracking Map CTA Button */}
-                  <TouchableOpacity
-                    className="bg-orange-500 py-3 rounded-[16px] flex-row items-center justify-center gap-1.5 shadow-sm shadow-orange-500/10"
-                    activeOpacity={0.8}
-                    onPress={() => handleTrackOrderFromModal(item)}
-                  >
-                    <Ionicons name="navigate-circle-outline" size={16} color="#fff" />
-                    <Text className="text-white text-xs font-bold" style={{ fontFamily: "Quicksand-Bold" }}>
-                      Track Live on Map
-                    </Text>
-                  </TouchableOpacity>
                 </View>
               )}
             />

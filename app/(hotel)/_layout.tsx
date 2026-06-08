@@ -1,11 +1,14 @@
-import { Redirect, Tabs } from "expo-router";
-import React, { useContext } from "react";
+import { Redirect, Tabs, useRouter } from "expo-router";
+import React, { useContext, useEffect } from "react";
 import Loading from "@/components/Loading";
 import AppwriteContext from "../lib/services/auth_services/AppwirteContext";
 import { Ionicons } from "@expo/vector-icons";
 import { View, Text, Image } from "react-native";
 import cn from "clsx";
 import { images } from "@/constants";
+import { useDispatch } from "react-redux";
+import { setLocation } from "../../store/slices/locationSlice";
+import * as Location from "expo-location";
 
 const TabBarIcon = ({
   focused,
@@ -23,9 +26,9 @@ const TabBarIcon = ({
       {icon ? (
         <Image
           source={icon}
-          className="size-7"
-          resizeMode="contain"
+          className="size-6"
           tintColor={focused ? "#FE8C00" : "#5D5F6D"}
+          resizeMode="contain"
         />
       ) : (
         <Ionicons
@@ -49,11 +52,56 @@ const TabBarIcon = ({
 
 export default function HotelLayout() {
   const { isLoggedIn, user, isLoading } = useContext(AppwriteContext);
+  const router = useRouter();
+  const dispatch = useDispatch();
+
+  useEffect(() => {
+    if (user && (user.latitude || user.longitude)) {
+      const parsedLat = Number(user.latitude);
+      const parsedLng = Number(user.longitude);
+      const savedLat = !isNaN(parsedLat) && user.latitude ? parsedLat : 20.5992;
+      const savedLng = !isNaN(parsedLng) && user.longitude ? parsedLng : 72.9342;
+
+      (async () => {
+        let countryCode = null;
+        const addrLower = (user.address || "").toLowerCase();
+        if (addrLower.includes("india") || addrLower.includes("gujarat") || addrLower.includes("in")) {
+          countryCode = "IN";
+        } else if (addrLower.includes("usa") || addrLower.includes("united states") || addrLower.includes("us")) {
+          countryCode = "US";
+        }
+        try {
+          const { status } = await Location.getForegroundPermissionsAsync();
+          if (status === "granted") {
+            const geocode = await Location.reverseGeocodeAsync({
+              latitude: savedLat,
+              longitude: savedLng,
+            });
+            if (geocode.length > 0) {
+              countryCode = geocode[0].isoCountryCode || null;
+            }
+          }
+        } catch (e) {
+          console.warn("Failed to reverse geocode manager location on mount", e);
+        }
+
+        dispatch(
+          setLocation({
+            latitude: savedLat,
+            longitude: savedLng,
+            address: user.address || "",
+            flatHouseNo: null,
+            countryCode,
+          })
+        );
+      })();
+    }
+  }, [user, dispatch]);
 
   if (isLoading) return <Loading />;
-  if (!isLoggedIn) return <Redirect href="/sign_in" />;
+  if (!isLoggedIn) return <Redirect href={"/(auth)/sign_in" as any} />;
   if (!user) return <Loading />;
-  if (user?.role !== "manager" && user?.role !== "hotel") return <Redirect href="/" />;
+  if (user?.role !== "manager" && user?.role !== "hotel") return <Redirect href={"/(tabs)" as any} />;
 
   return (
     <Tabs
@@ -128,7 +176,7 @@ export default function HotelLayout() {
         listeners={({ navigation }) => ({
           tabPress: (e) => {
             e.preventDefault();
-            navigation.navigate("add", { editId: undefined });
+            router.push({ pathname: "/(hotel)/add" as any, params: { editId: "" } });
           },
         })}
       />

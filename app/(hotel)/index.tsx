@@ -15,16 +15,21 @@ import { Swipeable } from "react-native-gesture-handler";
 import { SafeAreaView } from "react-native-safe-area-context";
 import AppwriteContext from "../lib/services/auth_services/AppwirteContext";
 import useAppwrite from "../lib/services/appwrite_data_services/useApprwriteData";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback } from "react";
+import { useSelector } from "react-redux";
+import { RootState } from "../store/store";
+import { formatPrice } from "../lib/currency";
 
 export default function MyMenuScreen() {
   const { user, appwrite } = useContext(AppwriteContext);
   const router = useRouter();
+  const countryCode = useSelector((state: RootState) => state.location.countryCode);
   
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
 
   // Fetch dynamic categories for horizontal selector
-  const { data: categoriesData } = useAppwrite({
+  const { data: categoriesData, refetch: refetchCategories } = useAppwrite({
     fn: () => appwrite.getCategories(),
   });
 
@@ -41,6 +46,14 @@ export default function MyMenuScreen() {
     refetchMenu({ category: selectedCategory === "all" ? undefined : selectedCategory });
   }, [selectedCategory]);
 
+  // Auto-refresh when screen comes into focus (e.g. returning from Add Food)
+  useFocusEffect(
+    useCallback(() => {
+      refetchMenu({ category: selectedCategory === "all" ? undefined : selectedCategory });
+      refetchCategories({});
+    }, [selectedCategory])
+  );
+
   const managerName = user?.name || "Domino's";
   const isDomino = managerName.toLowerCase().includes("domino");
 
@@ -53,10 +66,12 @@ export default function MyMenuScreen() {
   }, [menuData, selectedCategory]);
 
   const filteredMenuData = menuData?.filter((item: any) => {
+    const itemUserId = item.userId ? (typeof item.userId === "object" ? item.userId.$id : item.userId) : null;
+    
     if (isDomino) {
-      return item.userId === user?.$id || item.name.toLowerCase().includes("domino");
+      return itemUserId === user?.$id || item.name.toLowerCase().includes("domino");
     } else {
-      return item.userId === user?.$id || (!item.userId && !item.name.toLowerCase().includes("domino"));
+      return itemUserId === user?.$id;
     }
   }) || [];
 
@@ -87,10 +102,11 @@ export default function MyMenuScreen() {
   const activeCategoryIds = new Set(
     fullMenuData
       .filter((item: any) => {
+        const itemUserId = item.userId ? (typeof item.userId === "object" ? item.userId.$id : item.userId) : null;
         if (isDomino) {
-          return item.userId === user?.$id || item.name.toLowerCase().includes("domino");
+          return itemUserId === user?.$id || item.name.toLowerCase().includes("domino");
         } else {
-          return item.userId === user?.$id || (!item.userId && !item.name.toLowerCase().includes("domino"));
+          return itemUserId === user?.$id;
         }
       })
       .map((item: any) => {
@@ -170,7 +186,10 @@ export default function MyMenuScreen() {
           columnWrapperClassName="gap-7"
           contentContainerClassName="gap-7 px-5 pt-12 pb-32"
           refreshing={loading}
-          onRefresh={() => refetchMenu({ category: selectedCategory === "all" ? undefined : selectedCategory })}
+          onRefresh={() => {
+            refetchMenu({ category: selectedCategory === "all" ? undefined : selectedCategory });
+            refetchCategories({});
+          }}
           renderItem={({ item, index }) => {
             const isLeftCol = index % 2 === 0;
             return (
@@ -185,32 +204,39 @@ export default function MyMenuScreen() {
                       : {}
                   }
                 >
-                  <View className="size-32 absolute -top-10 rounded-full overflow-hidden self-center">
+                  <View className="size-32 absolute -top-10 self-center rounded-full overflow-hidden">
                     <Image
                       source={{ uri: item.image_url }}
-                      className="w-full h-full rounded-full overflow-hidden"
-                      resizeMode="cover"
+                      className="w-full h-full"
+                      resizeMode="contain"
                     />
                   </View>
 
                   <Text
-                    className="text-center base-bold text-dark-100 mb-2"
+                    className="text-center base-bold text-dark-100 mb-1.5"
                     numberOfLines={1}
                     style={{ fontFamily: "Quicksand-Bold" }}
                   >
                     {item.name}
                   </Text>
                   
+                  <View className="flex-row items-center justify-center mb-1.5">
+                    <Ionicons name="star" size={14} color="#f97316" />
+                    <Text className="text-xs text-orange-500 ml-1" style={{ fontFamily: "Quicksand-Bold" }}>
+                      {(item.rating ?? 4.5).toFixed(1)}
+                    </Text>
+                  </View>
+                  
                   <Text
                     className="body-regular text-gray-200 mb-4 text-center"
                     style={{ fontFamily: "Quicksand-Medium" }}
                   >
-                    From ${item.price.toFixed(2)}
+                    From {formatPrice(item.price, countryCode)}
                   </Text>
 
                   <View className="flex-col gap-2.5 mt-auto self-center w-11/12 -mb-1">
                     <TouchableOpacity 
-                      onPress={() => router.push(`/hotel/add?editId=${item.$id}` as any)}
+                      onPress={() => router.push(`/(hotel)/add?editId=${item.$id}` as any)}
                       className="flex-row items-center justify-center border border-orange-200 rounded-full py-2 w-full"
                     >
                       <Ionicons name="pencil" size={14} color="#f97316" />
@@ -253,7 +279,7 @@ export default function MyMenuScreen() {
                   : "No items listed under this category yet. Tap below to list one now!"}
               </Text>
               <TouchableOpacity
-                onPress={() => router.push("/hotel/add" as any)}
+                onPress={() => router.push("/(hotel)/add" as any)}
                 className="bg-orange-500 px-8 py-3.5 rounded-2xl mt-8 flex-row items-center gap-2 shadow-md shadow-orange-500/20"
                 activeOpacity={0.8}
               >

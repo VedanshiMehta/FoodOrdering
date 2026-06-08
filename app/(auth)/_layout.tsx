@@ -14,7 +14,7 @@ import AppwriteContext from "../lib/services/auth_services/AppwirteContext";
 
 export default function AuthLayout() {
   const { isLoggedIn } = useContext(AppwriteContext);
-  if (isLoggedIn) return <Redirect href="/" />;
+  if (isLoggedIn) return <Redirect href={"/(tabs)" as any} />;
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : "height"}

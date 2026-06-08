@@ -13,9 +13,13 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import AppwriteContext from "../lib/services/auth_services/AppwirteContext";
 import { APPWRITE_DATABASE_ID } from "../lib/services/auth_services/appwrite";
+import { useSelector } from "react-redux";
+import { RootState } from "../../store/store";
+import { formatPrice } from "../lib/currency";
 
 export default function HotelOrdersScreen() {
   const { user, appwrite } = useContext(AppwriteContext);
+  const countryCode = useSelector((state: RootState) => state.location.countryCode);
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -85,7 +89,7 @@ export default function HotelOrdersScreen() {
     });
   });
 
-  const updateOrderStatus = async (orderId: string, nextStatus: "preparing" | "ready") => {
+  const updateOrderStatus = async (orderId: string, nextStatus: "preparing" | "ready" | "rejected") => {
     setUpdatingId(orderId);
     try {
       await appwrite.database.updateRow({
@@ -96,9 +100,15 @@ export default function HotelOrdersScreen() {
           status: nextStatus,
         },
       });
+      
+      let statusMsg = "";
+      if (nextStatus === "preparing") statusMsg = "Preparing";
+      else if (nextStatus === "ready") statusMsg = "Ready for Pickup";
+      else if (nextStatus === "rejected") statusMsg = "Rejected";
+
       Alert.alert(
         "Status Updated",
-        `Order is now marked as "${nextStatus === "preparing" ? "Preparing" : "Ready for Pickup"}".`
+        `Order is now marked as "${statusMsg}".`
       );
       await fetchOrders();
     } catch (err) {
@@ -121,6 +131,8 @@ export default function HotelOrdersScreen() {
         return { bg: "bg-blue-50", text: "text-blue-600", label: "Out with Rider" };
       case "delivered":
         return { bg: "bg-emerald-50", text: "text-emerald-600", label: "Delivered" };
+      case "rejected":
+        return { bg: "bg-red-100", text: "text-red-700", label: "Rejected" };
       default:
         return { bg: "bg-gray-50", text: "text-gray-600", label: "Unknown" };
     }
@@ -205,7 +217,7 @@ export default function HotelOrdersScreen() {
                       Total Amount
                     </Text>
                     <Text className="text-base font-bold text-gray-900 mt-0.5" style={{ fontFamily: "Quicksand-Bold" }}>
-                      ${(item.total || 0).toFixed(2)}
+                      {formatPrice(item.total || 0, countryCode)}
                     </Text>
                   </View>
                 </View>
@@ -365,7 +377,7 @@ export default function HotelOrdersScreen() {
                                 {food.quantity}x {food.name}
                               </Text>
                               <Text className="text-xs font-bold text-gray-600 font-sans">
-                                ${(food.price * food.quantity).toFixed(2)}
+                                {formatPrice(food.price * food.quantity, countryCode)}
                               </Text>
                             </View>
                             {/* Nested customizations list */}
@@ -374,7 +386,7 @@ export default function HotelOrdersScreen() {
                                 {food.customizations.map((cus: any, idx: number) => (
                                   <View key={idx} className="bg-white border border-gray-100 px-2 py-0.5 rounded-lg">
                                     <Text className="text-[9px] text-gray-500 font-medium" style={{ fontFamily: "Quicksand-Medium" }}>
-                                      + {cus.name} {cus.price > 0 ? `(+$${cus.price.toFixed(2)})` : ""}
+                                      + {cus.name} {cus.price > 0 ? `(+${formatPrice(cus.price, countryCode)})` : ""}
                                     </Text>
                                   </View>
                                 ))}
@@ -402,7 +414,7 @@ export default function HotelOrdersScreen() {
                             Total Price
                           </Text>
                           <Text className="text-lg font-bold text-gray-900" style={{ fontFamily: "Quicksand-Bold" }}>
-                            ${(selectedOrder.total || 0).toFixed(2)}
+                            {formatPrice(selectedOrder.total || 0, countryCode)}
                           </Text>
                         </View>
                       </View>
@@ -411,27 +423,53 @@ export default function HotelOrdersScreen() {
 
                   {/* Kitchen Status Controls */}
                   {selectedOrder.status === "pending" && (
-                    <TouchableOpacity
-                      onPress={async () => {
-                        await updateOrderStatus(selectedOrder.$id, "preparing");
-                        setShowDetailsModal(false);
-                        setSelectedOrder(null);
-                      }}
-                      className="bg-orange-500 h-12 rounded-2xl items-center justify-center flex-row gap-2 shadow-sm shadow-orange-500/10"
-                      activeOpacity={0.8}
-                      disabled={isProcessing}
-                    >
-                      {isProcessing ? (
-                        <ActivityIndicator size="small" color="#fff" />
-                      ) : (
-                        <>
-                          <Ionicons name="flame" size={16} color="#fff" />
-                          <Text className="text-white text-xs font-bold" style={{ fontFamily: "Quicksand-Bold" }}>
-                            Accept & Start Cooking
-                          </Text>
-                        </>
-                      )}
-                    </TouchableOpacity>
+                    <View className="flex-row gap-3">
+                      <TouchableOpacity
+                        onPress={() => {
+                          Alert.alert(
+                            "Reject Order?",
+                            "Are you sure you want to reject this order? If paid by card, you must manually issue a refund from your Stripe Dashboard.",
+                            [
+                              { text: "Cancel", style: "cancel" },
+                              { text: "Reject & Cancel", style: "destructive", onPress: async () => {
+                                  await updateOrderStatus(selectedOrder.$id, "rejected");
+                                  setShowDetailsModal(false);
+                                  setSelectedOrder(null);
+                              }}
+                            ]
+                          );
+                        }}
+                        className="flex-1 bg-red-100 h-12 rounded-2xl items-center justify-center border border-red-200"
+                        activeOpacity={0.8}
+                        disabled={isProcessing}
+                      >
+                        <Text className="text-red-600 text-xs font-bold" style={{ fontFamily: "Quicksand-Bold" }}>
+                          Reject
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        onPress={async () => {
+                          await updateOrderStatus(selectedOrder.$id, "preparing");
+                          setShowDetailsModal(false);
+                          setSelectedOrder(null);
+                        }}
+                        className="flex-[2] bg-orange-500 h-12 rounded-2xl items-center justify-center flex-row gap-2 shadow-sm shadow-orange-500/10"
+                        activeOpacity={0.8}
+                        disabled={isProcessing}
+                      >
+                        {isProcessing ? (
+                          <ActivityIndicator size="small" color="#fff" />
+                        ) : (
+                          <>
+                            <Ionicons name="flame" size={16} color="#fff" />
+                            <Text className="text-white text-xs font-bold" style={{ fontFamily: "Quicksand-Bold" }}>
+                              Accept & Start Cooking
+                            </Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                    </View>
                   )}
 
                   {selectedOrder.status === "preparing" && (

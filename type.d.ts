@@ -2,6 +2,8 @@ import { Models } from "react-native-appwrite";
 
 export interface MenuItem extends Models.Document {
   name: string;
+  hotelName?: string;
+  userId?: string;
   price: number;
   image_url: string;
   description: string;
@@ -26,6 +28,8 @@ export interface User extends Models.Document {
   addressLabel?: string;
   latitude?: string | number;
   longitude?: string | number;
+  openTime?: string;
+  closeTime?: string;
 }
 
 export interface CartCustomization {
@@ -120,4 +124,15 @@ interface GetMenuParams {
   category?: string;
   query?: string;
   limit?: number;
+}
+
+import "react-native";
+declare module "react-native" {
+  interface ViewProps { className?: string; }
+  interface TextProps { className?: string; }
+  interface ScrollViewProps { className?: string; }
+  interface ImageProps { className?: string; }
+  interface ImageBackgroundProps { className?: string; }
+  interface TouchableOpacityProps { className?: string; }
+  interface TextInputProps { className?: string; }
 }

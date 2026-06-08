@@ -81,7 +81,7 @@ export default function AdminDashboard() {
       await appwrite.logout();
       setIsLoggedIn(false);
       setUser(null);
-      router.replace("/sign_in" as any);
+      router.replace("/(auth)/sign_in" as any);
     } catch (err) {
       Alert.alert("Logout Error", "Failed to sign out safely.");
     }

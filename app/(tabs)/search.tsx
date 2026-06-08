@@ -5,7 +5,7 @@ import SearchBar from "@/components/SearchBar";
 import { images } from "@/constants";
 import { Category, MenuItem } from "@/type";
 import cn from "clsx";
-import { useLocalSearchParams } from "expo-router";
+import { useGlobalSearchParams } from "expo-router";
 import React, { useContext, useEffect } from "react";
 import { FlatList, Image, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -14,7 +14,7 @@ import AppwriteContext from "../lib/services/auth_services/AppwirteContext";
 
 const Search = () => {
   const { appwrite } = useContext(AppwriteContext);
-  const { category, query } = useLocalSearchParams<{
+  const { category, query } = useGlobalSearchParams<{
     query: string;
     category: string;
   }>();

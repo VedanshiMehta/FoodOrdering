@@ -25,6 +25,3 @@ export const subscribeToMenu = (callback: () => void) => {
   };
 };
 
-export default function MenuStateDummy() {
-  return null;
-}

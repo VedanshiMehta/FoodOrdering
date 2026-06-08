@@ -52,9 +52,9 @@ export default function DeliveryLayout() {
   const [mapOriginTab, setMapOriginTab] = useState<string | null>(null);
 
   if (isLoading) return <Loading />;
-  if (!isLoggedIn) return <Redirect href="/sign_in" />;
+  if (!isLoggedIn) return <Redirect href={"/(auth)/sign_in" as any} />;
   if (!user) return <Loading />;
-  if (user?.role !== "rider" && user?.role !== "delivery") return <Redirect href="/" />;
+  if (user?.role !== "rider" && user?.role !== "delivery") return <Redirect href={"/(tabs)" as any} />;
 
   return (
     <DeliveryContext.Provider value={{ selectedOrderForMap, setSelectedOrderForMap, customerCoords, setCustomerCoords, mapOriginTab, setMapOriginTab }}>

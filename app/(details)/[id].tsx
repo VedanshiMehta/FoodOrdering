@@ -13,9 +13,13 @@ import {
   Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useSelector } from "react-redux";
 import AppwriteContext from "../lib/services/auth_services/AppwirteContext";
 import CartContext from "../lib/services/cart_services/CartContext";
 import { MenuItem, CartCustomization } from "@/type";
+import Loading from "@/components/Loading";
+import { RootState } from "@/store/store";
+import { formatPrice, getConvertedAmount, getCurrencySymbol } from "../lib/currency";
 
 import { images, toppings as CONST_TOPPINGS, sides as CONST_SIDES } from "@/constants";
 import { Query } from "react-native-appwrite";
@@ -65,11 +69,20 @@ const mapCustomization = (cus: any) => {
   }
 };
 
+const formatTimeOnly = (isoString?: string | null) => {
+  if (!isoString) return "";
+  const d = new Date(isoString);
+  if (isNaN(d.getTime())) return isoString;
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+};
+
 export default function ItemDetailsScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
   const { appwrite } = useContext(AppwriteContext);
   const { addItem } = useContext(CartContext);
+  const countryCode = useSelector((state: RootState) => state.location.countryCode);
+  const currencySymbol = getCurrencySymbol(countryCode);
 
   // States
   const [item, setItem] = useState<MenuItem | null>(null);
@@ -80,6 +93,9 @@ export default function ItemDetailsScreen() {
   const [selectedBun, setSelectedBun] = useState(BUN_TYPES[0]);
   const [dynamicToppings, setDynamicToppings] = useState<any[]>([]);
   const [dynamicSides, setDynamicSides] = useState<any[]>([]);
+  const [hotelOpenTime, setHotelOpenTime] = useState<string | null>(null);
+  const [hotelCloseTime, setHotelCloseTime] = useState<string | null>(null);
+  const [managerName, setManagerName] = useState<string | null>(null);
 
   // Fetch Item & Customizations from Appwrite dynamically
   useEffect(() => {
@@ -90,6 +106,31 @@ export default function ItemDetailsScreen() {
         const menuItemDoc = await appwrite.getMenuItem(id as string);
         if (menuItemDoc) {
           setItem(menuItemDoc as unknown as MenuItem);
+          
+          let targetUserId = menuItemDoc.userId;
+
+          if (!targetUserId) {
+             const fallbackUsers = await appwrite.database.listRows({
+                databaseId: APPWRITE_DATABASE_ID,
+                tableId: APPWRITE_USERS_COLLECTION_ID,
+                queries: [Query.equal("role", "manager")]
+             });
+             if (fallbackUsers.rows.length > 0) {
+                targetUserId = fallbackUsers.rows[0].$id;
+             }
+          }
+
+          if (targetUserId) {
+            const hotelUser = await appwrite.getHotelDetails(targetUserId);
+            if (hotelUser) {
+              setHotelOpenTime(hotelUser.openTime || null);
+              setHotelCloseTime(hotelUser.closeTime || null);
+              setManagerName(hotelUser.name || null);
+            }
+          } else {
+            setHotelOpenTime(null);
+            setHotelCloseTime(null);
+          }
 
           // Perform direct query on menu_customizations database collection linking menu to customizations
           const menuCusLinks = await appwrite.database.listRows({
@@ -236,14 +277,7 @@ export default function ItemDetailsScreen() {
   };
 
   if (loading) {
-    return (
-      <View className="flex-1 items-center justify-center bg-white">
-        <ActivityIndicator size="large" color="#f97316" />
-        <Text className="mt-3 text-[15px] text-gray-500" style={{ fontFamily: "Quicksand-SemiBold" }}>
-          Fetching delicious details...
-        </Text>
-      </View>
-    );
+    return <Loading text="Fetching delicious details..." />;
   }
 
   if (!item) {
@@ -260,6 +294,20 @@ export default function ItemDetailsScreen() {
         </TouchableOpacity>
       </View>
     );
+  }
+
+  let parsedHotelName = item?.hotelName || managerName;
+  if (!parsedHotelName && (item?.name.toLowerCase().startsWith("domino's") || item?.name.toLowerCase().startsWith("domino’s"))) {
+    parsedHotelName = "Domino's";
+  }
+  
+  let parsedFoodName = item?.name || "";
+  if (parsedHotelName) {
+    if (parsedHotelName.toLowerCase() === "domino's" || parsedHotelName.toLowerCase() === "domino’s") {
+      parsedFoodName = parsedFoodName.replace(/^domino['’]s\s*/i, '');
+    } else {
+      parsedFoodName = parsedFoodName.replace(new RegExp(`^${parsedHotelName}\\s*`, 'i'), '');
+    }
   }
 
   return (
@@ -282,8 +330,13 @@ export default function ItemDetailsScreen() {
         {/* Upper Info Grid & Floating Product Image */}
         <View className="flex-row px-5 mt-2.5 mb-5 relative" style={{ minHeight: width * 0.58 }}>
           <View className="z-10" style={{ width: width * 0.5 }}>
+            {parsedHotelName ? (
+              <Text className="text-sm text-orange-500 uppercase tracking-widest" style={{ fontFamily: "Quicksand-Bold" }}>
+                {parsedHotelName}
+              </Text>
+            ) : null}
             <Text className="text-[26px] text-gray-900 mb-1 leading-8" style={{ fontFamily: "Quicksand-Bold" }}>
-              {item.name}
+              {parsedFoodName}
             </Text>
             <Text className="text-[15px] text-gray-400 mb-2.5" style={{ fontFamily: "Quicksand-Medium" }}>
               {item.type || "Cheeseburger"}
@@ -294,24 +347,21 @@ export default function ItemDetailsScreen() {
               {[...Array(5)].map((_, i) => (
                 <Ionicons
                   key={i}
-                  name={i < Math.floor(item.rating || 5) ? "star" : "star-outline"}
+                  name={i < Math.floor(item.rating ?? 4.5) ? "star" : "star-outline"}
                   size={16}
                   color="#fbbf24"
                   style={{ marginRight: 2 }}
                 />
               ))}
               <Text className="text-xs text-gray-500 ml-1.5" style={{ fontFamily: "Quicksand-Bold" }}>
-                {(item.rating || 4.9).toFixed(1)}/5
+                {(item.rating ?? 4.5).toFixed(1)}/5
               </Text>
             </View>
 
             {/* Price digits */}
             <View className="flex-row items-start mb-4">
-              <Text className="text-base text-orange-500 mt-1 mr-0.5" style={{ fontFamily: "Quicksand-Bold" }}>
-                $
-              </Text>
               <Text className="text-[32px] text-orange-500" style={{ fontFamily: "Quicksand-Bold" }}>
-                {item.price.toFixed(2)}
+                {formatPrice(item.price, countryCode)}
               </Text>
             </View>
 
@@ -372,21 +422,31 @@ export default function ItemDetailsScreen() {
           </View>
         </View>
 
+        {/* Hotel Operating Hours */}
+        {hotelOpenTime && hotelCloseTime && (
+          <View className="flex-row items-center px-5 mb-4 mt-2">
+            <Ionicons name="time" size={18} color="#f97316" />
+            <Text className="text-[14px] text-gray-700 ml-1.5" style={{ fontFamily: "Quicksand-Medium" }}>
+              <Text className="text-gray-900" style={{ fontFamily: "Quicksand-Bold" }}>Operating Hours:</Text> {formatTimeOnly(hotelOpenTime)} - {formatTimeOnly(hotelCloseTime)}
+            </Text>
+          </View>
+        )}
+
         {/* Dynamic Delivery Pill Bar */}
         <View className="flex-row items-center bg-amber-50 border border-amber-100 rounded-[20px] py-3 px-4 mx-5 justify-between mb-5">
           <View className="flex-row items-center">
-            <Text className="text-sm mr-1.5">💲</Text>
+            <Text className="text-[15px] mr-1.5 font-bold text-amber-500">{currencySymbol}</Text>
             <Text className="text-[13px] text-amber-600" style={{ fontFamily: "Quicksand-Bold" }}>Free Delivery</Text>
           </View>
           <View className="w-1 h-1 rounded-full bg-amber-300" />
-          <View className="flex-row items-center">
-            <Text className="text-sm mr-1.5">🕒</Text>
+          <View className="flex-row items-center space-x-1.5">
+            <Ionicons name="time-outline" size={16} color="#d97706" />
             <Text className="text-[13px] text-amber-600" style={{ fontFamily: "Quicksand-Bold" }}>20 - 30 mins</Text>
           </View>
-          <View className="w-1 h-1 rounded-full bg-amber-300" />
+          <View className="w-1 h-1 rounded-full bg-amber-200" />
           <View className="flex-row items-center">
             <Text className="text-sm mr-1.5">⭐</Text>
-            <Text className="text-[13px] text-amber-600" style={{ fontFamily: "Quicksand-Bold" }}>{(item.rating || 4.5).toFixed(1)}</Text>
+            <Text className="text-[13px] text-amber-600" style={{ fontFamily: "Quicksand-Bold" }}>{(item.rating ?? 4.5).toFixed(1)}</Text>
           </View>
         </View>
 
@@ -534,7 +594,7 @@ export default function ItemDetailsScreen() {
           }}
         >
           <Ionicons name="bag-handle-outline" size={20} color="#fff" />
-          <Text className="text-white text-[15px]" style={{ fontFamily: "Quicksand-Bold" }}>Add to cart (${overallTotal.toFixed(2)})</Text>
+          <Text className="text-white text-[15px]" style={{ fontFamily: "Quicksand-Bold" }}>Add to cart ({formatPrice(overallTotal, countryCode)})</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

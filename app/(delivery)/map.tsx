@@ -172,7 +172,7 @@ export default function DeliveryMapScreen() {
   }, [routePoints?.start?.latitude, routePoints?.start?.longitude, routePoints?.end?.latitude, routePoints?.end?.longitude]);
 
   const handleBack = () => {
-    router.replace("/delivery" as any);
+    router.replace("/(delivery)" as any);
   };
 
   // Helper: Geodesic distance calculation using Haversine formula
@@ -915,7 +915,7 @@ export default function DeliveryMapScreen() {
               className="bg-green-500 w-full py-3.5 rounded-2xl items-center justify-center shadow-md shadow-green-500/20"
               onPress={() => {
                 setShowSuccessModal(false);
-                router.replace("/delivery" as any);
+                router.replace("/(delivery)" as any);
               }}
             >
               <Text className="text-white font-bold text-sm" style={{ fontFamily: "Quicksand-Bold" }}>

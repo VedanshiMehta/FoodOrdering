@@ -16,11 +16,15 @@ import { APPWRITE_DATABASE_ID } from "../lib/services/auth_services/appwrite";
 import useAppwrite from "../lib/services/appwrite_data_services/useApprwriteData";
 import { DeliveryContext } from "./_layout";
 import { images } from "@/constants";
+import { useSelector } from "react-redux";
+import { RootState } from "../../store/store";
+import { formatPrice } from "../lib/currency";
 
 export default function ActiveDeliveriesScreen() {
   const router = useRouter();
   const { appwrite, user } = useContext(AppwriteContext);
   const { setSelectedOrderForMap, setCustomerCoords, setMapOriginTab } = useContext(DeliveryContext);
+  const countryCode = useSelector((state: RootState) => state.location.countryCode);
 
   const [isUpdating, setIsUpdating] = useState(false);
 
@@ -95,7 +99,7 @@ export default function ActiveDeliveriesScreen() {
     }
 
     setMapOriginTab("active");
-    router.push({ pathname: "/delivery/map" } as any);
+    router.push({ pathname: "/(delivery)/map" } as any);
   };
 
   return (
@@ -184,7 +188,7 @@ export default function ActiveDeliveriesScreen() {
                   COD to Collect
                 </Text>
                 <Text className="text-lg font-bold text-orange-500" style={{ fontFamily: "Quicksand-Bold" }}>
-                  ${(item.total || 0).toFixed(2)}
+                  {formatPrice(item.total || 0, countryCode)}
                 </Text>
               </View>
 

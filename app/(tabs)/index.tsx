@@ -19,11 +19,52 @@ import useAppwrite from "../lib/services/appwrite_data_services/useApprwriteData
 
 export default function Index() {
   const { user, appwrite } = useContext(AppwriteContext);
-  const { address, flatHouseNo } = useSelector(
+  const { address, flatHouseNo, countryCode } = useSelector(
     (state: RootState) => state.location,
   );
   const router = useRouter();
   const deliveryAddress = flatHouseNo || address?.split(",")[0];
+
+  const getSeasonalCombo = (code?: string) => {
+    const month = new Date().getMonth(); // 0-11
+    
+    // Explicit Indian Seasons
+    if (code?.toUpperCase() === 'IN') {
+      if (month >= 5 && month <= 8) return "RAINY COMBO";   // June to Sept
+      if (month >= 2 && month <= 4) return "SUMMER COMBO";  // March to May
+      if (month >= 9 && month <= 10) return "AUTUMN COMBO"; // Oct to Nov
+      return "WINTER COMBO";                                // Dec to Feb
+    }
+
+    // Common southern hemisphere country codes
+    const southernHemisphere = ['AU', 'NZ', 'ZA', 'AR', 'BR', 'CL', 'PE'];
+    const isSouthern = code ? southernHemisphere.includes(code.toUpperCase()) : false;
+
+    let season = "SUMMER";
+    if (isSouthern) {
+      if (month >= 2 && month <= 4) season = "AUTUMN";
+      else if (month >= 5 && month <= 7) season = "WINTER";
+      else if (month >= 8 && month <= 10) season = "SPRING";
+      else season = "SUMMER";
+    } else {
+      // Northern Hemisphere (Default)
+      if (month >= 2 && month <= 4) season = "SPRING";
+      else if (month >= 5 && month <= 7) season = "SUMMER";
+      else if (month >= 8 && month <= 10) season = "AUTUMN";
+      else season = "WINTER";
+    }
+    return `${season} COMBO`;
+  };
+
+  const dynamicOffers = offers.map((offer, index) => {
+    if (index === 0) {
+      return {
+        ...offer,
+        title: getSeasonalCombo(countryCode),
+      };
+    }
+    return offer;
+  });
 
   const { data: categories } = useAppwrite({
     fn: () => appwrite.getCategories(),
@@ -60,7 +101,7 @@ export default function Index() {
   return (
     <SafeAreaView className="flex-1 bg-white">
       <FlatList
-        data={offers}
+        data={dynamicOffers}
         renderItem={({ item, index }) => {
           const isEven = index % 2 === 0;
           return (
@@ -116,7 +157,7 @@ export default function Index() {
                 Deliver To
               </Text>
               <TouchableOpacity
-                onPress={() => router.push("/select-location" as any)}
+                onPress={() => router.push("/(maps)/select-location" as any)}
                 className="flex-center flex-row gap-x-1 mt-0.5"
               >
                 <Text

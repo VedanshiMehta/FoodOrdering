@@ -7,9 +7,9 @@ export default function AdminLayout() {
   const { isLoggedIn, user, isLoading } = useContext(AppwriteContext);
 
   if (isLoading) return <Loading />;
-  if (!isLoggedIn) return <Redirect href="/sign_in" />;
+  if (!isLoggedIn) return <Redirect href={"/(auth)/sign_in" as any} />;
   if (!user) return <Loading />;
-  if (user?.role !== "admin") return <Redirect href="/" />;
+  if (user?.role !== "admin") return <Redirect href={"/(tabs)" as any} />;
 
   return <Stack screenOptions={{ headerShown: false }} />;
 }

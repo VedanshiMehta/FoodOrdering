@@ -38,7 +38,7 @@ const SignUp = () => {
           setUser(userResponse as User);
         }
         setIsLoggedIn(true);
-        router.replace("/");
+        router.replace("/(tabs)");
       }
     } catch (error) {
       utils.showAlert(String(error), "Error");

@@ -280,7 +280,13 @@ const reverseGeocodeWithGoogle = async (
     const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${GOOGLE_MAPS_API_KEY}`;
     const data = await fetchWithTimeout(url);
     if (data.status === "OK" && data.results && data.results.length > 0) {
-      return data.results[0].formatted_address;
+      const result = data.results[0];
+      let countryCode = null;
+      if (result.address_components) {
+        const countryComponent = result.address_components.find((c: any) => c.types.includes("country"));
+        if (countryComponent) countryCode = countryComponent.short_name;
+      }
+      return { formattedAddress: result.formatted_address, countryCode };
     }
   } catch (error) {
     console.error("Google Reverse Geocoding error:", error);
@@ -300,7 +306,7 @@ const reverseGeocodeWithNative = async (
   if (geocode.length === 0) return null;
 
   const place = geocode[0];
-  return [
+  const formattedAddress = [
     place.name,
     place.street,
     place.district,
@@ -310,6 +316,8 @@ const reverseGeocodeWithNative = async (
   ]
     .filter(Boolean)
     .join(", ");
+    
+  return { formattedAddress, countryCode: place.isoCountryCode || null };
 };
 
 const getAddressFromCoordinates = async (
@@ -373,6 +381,7 @@ export const useLocationSetup = () => {
     longitudeDelta: DEFAULT_REGION.longitudeDelta,
   });
   const [address, setAddress] = useState<string | null>(savedLocation.address);
+  const [countryCode, setCountryCode] = useState<string | null>(savedLocation.countryCode || null);
   const [flatHouseNo, setFlatHouseNo] = useState(
     savedLocation.flatHouseNo ?? "",
   );
@@ -501,12 +510,13 @@ export const useLocationSetup = () => {
 
   const reverseGeocode = async (latitude: number, longitude: number) => {
     try {
-      const formattedAddress = await getAddressFromCoordinates(
+      const result = await getAddressFromCoordinates(
         latitude,
         longitude,
       );
-      if (formattedAddress) {
-        setAddress(formattedAddress);
+      if (result) {
+        setAddress(result.formattedAddress);
+        setCountryCode(result.countryCode);
       }
     } catch (error) {
       console.error("Error reverse geocoding:", error);
@@ -708,11 +718,14 @@ export const useLocationSetup = () => {
         latitudeDelta: 0.0012,
         longitudeDelta: 0.0012,
       };
-      const formattedAddress =
-        (await getAddressFromCoordinates(
+      const result = await getAddressFromCoordinates(
           newRegion.latitude,
           newRegion.longitude,
-        )) || "Current location";
+      );
+      const formattedAddress = result?.formattedAddress || "Current location";
+      if (result?.countryCode) {
+        setCountryCode(result.countryCode);
+      }
 
       setSearchQuery("");
       setAddressSuggestions([]);
@@ -769,6 +782,7 @@ export const useLocationSetup = () => {
         longitude: currentRegion.longitude,
         address: address,
         flatHouseNo: flatHouseNo.trim() || null,
+        countryCode: countryCode,
       }),
     );
   };

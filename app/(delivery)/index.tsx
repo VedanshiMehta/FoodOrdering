@@ -18,11 +18,15 @@ import { APPWRITE_DATABASE_ID } from "../lib/services/auth_services/appwrite";
 import useAppwrite from "../lib/services/appwrite_data_services/useApprwriteData";
 import { DeliveryContext } from "./_layout";
 import { images } from "@/constants";
+import { useSelector } from "react-redux";
+import { RootState } from "../../store/store";
+import { formatPrice } from "../lib/currency";
 
 export default function DeliveriesScreen() {
   const router = useRouter();
   const { appwrite, user } = useContext(AppwriteContext);
   const { setSelectedOrderForMap, setCustomerCoords, setMapOriginTab } = useContext(DeliveryContext);
+  const countryCode = useSelector((state: RootState) => state.location.countryCode);
 
   const [isUpdating, setIsUpdating] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
@@ -142,7 +146,7 @@ export default function DeliveriesScreen() {
     }
 
     setMapOriginTab(origin);
-    router.push({ pathname: "/delivery/map" } as any);
+    router.push({ pathname: "/(delivery)/map" } as any);
   };
 
   const formatTime = (ts: any) => {
@@ -223,7 +227,7 @@ export default function DeliveriesScreen() {
                     COD Collect
                   </Text>
                   <Text className="text-sm font-bold text-gray-900 mt-0.5" style={{ fontFamily: "Quicksand-Bold" }}>
-                    ${(item.total || 0).toFixed(2)}
+                    {formatPrice(item.total || 0, countryCode)}
                   </Text>
                 </View>
               </View>
@@ -383,7 +387,7 @@ export default function DeliveriesScreen() {
                                 {food.quantity}x {food.name}
                               </Text>
                               <Text className="text-xs font-bold text-gray-600 font-sans">
-                                ${(food.price * food.quantity).toFixed(2)}
+                                {formatPrice(food.price * food.quantity, countryCode)}
                               </Text>
                             </View>
                             {food.customizations && food.customizations.length > 0 && (
@@ -391,7 +395,7 @@ export default function DeliveriesScreen() {
                                 {food.customizations.map((cus: any, idx: number) => (
                                   <View key={idx} className="bg-white border border-gray-100 px-2 py-0.5 rounded-lg">
                                     <Text className="text-[9px] text-gray-500 font-medium" style={{ fontFamily: "Quicksand-Medium" }}>
-                                      + {cus.name} {cus.price > 0 ? `(+$${cus.price.toFixed(2)})` : ""}
+                                      + {cus.name} {cus.price > 0 ? `(+${formatPrice(cus.price, countryCode)})` : ""}
                                     </Text>
                                   </View>
                                 ))}
@@ -408,7 +412,7 @@ export default function DeliveriesScreen() {
                             COD to Collect
                           </Text>
                           <Text className="text-lg font-bold text-orange-500" style={{ fontFamily: "Quicksand-Bold" }}>
-                            ${(selectedOrder.total || 0).toFixed(2)}
+                            {formatPrice(selectedOrder.total || 0, countryCode)}
                           </Text>
                         </View>
                       </View>

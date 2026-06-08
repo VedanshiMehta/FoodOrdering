@@ -3,9 +3,13 @@ import { images } from "@/constants";
 import { CartItemType } from "@/type";
 import { useContext } from "react";
 import { Image, Text, TouchableOpacity, View } from "react-native";
+import { useSelector } from "react-redux";
+import { RootState } from "@/store/store";
+import { formatPrice } from "@/app/lib/currency";
 
 const CartItem = ({ item }: { item: CartItemType }) => {
   const { increaseQty, decreaseQty, removeItem } = useContext(CartContext);
+  const countryCode = useSelector((state: RootState) => state.location.countryCode);
 
   const customizationPrice = item.customizations?.reduce((sum, c) => sum + c.price, 0) ?? 0;
   const singleItemTotal = item.price + customizationPrice;
@@ -34,7 +38,7 @@ const CartItem = ({ item }: { item: CartItemType }) => {
             </Text>
           ) : null}
           <Text className="paragraph-bold text-primary mt-1">
-            ${singleItemTotal.toFixed(2)}
+            {formatPrice(singleItemTotal, countryCode)}
           </Text>
 
           <View className="flex flex-row items-center gap-x-4 mt-2">

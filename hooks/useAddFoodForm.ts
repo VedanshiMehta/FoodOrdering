@@ -1,7 +1,7 @@
 import React, { useContext, useEffect, useState } from "react";
 import { Alert } from "react-native";
 import * as ImagePicker from "expo-image-picker";
-import { useRouter, useLocalSearchParams } from "expo-router";
+import { useRouter, useGlobalSearchParams } from "expo-router";
 import { ID, Query } from "react-native-appwrite";
 import AppwriteContext from "../app/lib/services/auth_services/AppwirteContext";
 import {
@@ -11,11 +11,15 @@ import {
   CATEGORIES_COLLECTION_ID,
   CUSTOMIZATIONS_COLLECTION_ID,
 } from "../app/lib/services/auth_services/appwrite";
-import { addMyFoodItem } from "../app/hotel/_menuState";
+import { addMyFoodItem } from "./hotelMenuState";
+import { useSelector } from "react-redux";
+import { RootState } from "../store/store";
+import { getConvertedAmount, getUsdAmount } from "../app/lib/currency";
 
 export default function useAddFoodForm() {
   const { user, appwrite } = useContext(AppwriteContext);
   const router = useRouter();
+  const countryCode = useSelector((state: RootState) => state.location.countryCode);
 
   // Form Field States
   const [name, setName] = useState("");
@@ -36,7 +40,7 @@ export default function useAddFoodForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Edit Mode States
-  const { editId } = useLocalSearchParams<{ editId: string }>();
+  const { editId } = useGlobalSearchParams<{ editId: string }>();
   const [isEditMode, setIsEditMode] = useState(false);
   const [existingImageUrl, setExistingImageUrl] = useState<string | null>(null);
 
@@ -68,7 +72,7 @@ export default function useAddFoodForm() {
       const item = await appwrite.getMenuItem(id);
       if (item) {
         setName(item.name || "");
-        setPrice(item.price?.toString() || "");
+        setPrice(item.price ? getConvertedAmount(item.price, countryCode).toString() : "");
         setDescription(item.description || "");
         setCalories(item.calories?.toString() || "");
         setProtein(item.protein?.toString() || "");
@@ -216,16 +220,17 @@ export default function useAddFoodForm() {
         }
       }
 
-      const dataToSave = {
+      const dataToSave: any = {
         name: name.trim(),
         description: description.trim(),
-        price: parseFloat(price) || 9.99,
+        price: getUsdAmount(parseFloat(price) || 9.99, countryCode),
         rating: 4.5,
         calories: parseInt(calories) || 350,
         protein: parseInt(protein) || 20,
         image_url: uploadedUrl,
         categories: categoryId,
         userId: user?.$id,
+        hotelName: user?.name,
       };
 
       let menuDoc;
@@ -239,6 +244,7 @@ export default function useAddFoodForm() {
           });
         } catch (schemaError: any) {
           delete dataToSave.userId;
+          delete dataToSave.hotelName;
           menuDoc = await appwrite.database.updateRow({
             databaseId: APPWRITE_DATABASE_ID,
             tableId: MENU_COLLECTION_ID,
@@ -257,6 +263,7 @@ export default function useAddFoodForm() {
           });
         } catch (schemaError: any) {
           delete dataToSave.userId;
+          delete dataToSave.hotelName;
           menuDoc = await appwrite.database.createRow({
             databaseId: APPWRITE_DATABASE_ID,
             tableId: MENU_COLLECTION_ID,
@@ -327,7 +334,7 @@ export default function useAddFoodForm() {
       setSelectedToppings([]);
       setSelectedSides([]);
 
-      router.push("/hotel" as any);
+      router.push({ pathname: "/(hotel)", params: { editId: "" } } as any);
     } catch (err: any) {
       console.error("Failed to add new food dish:", err);
       Alert.alert("Publish Failed", "Could not upload the details to Appwrite. Please verify database columns and try again.");

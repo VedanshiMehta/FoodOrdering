@@ -23,6 +23,8 @@ export interface Order {
   pickupBranchLong?: string;
   userLat?: string;
   userLong?: string;
+  rating?: number;
+  comment?: string;
 }
 
 export interface OrderState {

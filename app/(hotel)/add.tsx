@@ -18,9 +18,13 @@ import * as ImagePicker from "expo-image-picker";
 import AppwriteContext from "../lib/services/auth_services/AppwirteContext";
 import useAppwrite from "../lib/services/appwrite_data_services/useApprwriteData";
 import useAddFoodForm from "../../hooks/useAddFoodForm";
+import { useSelector } from "react-redux";
+import { RootState } from "../../store/store";
+import { getCurrencyName, getCurrencySymbol, formatPrice } from "../lib/currency";
 
 export default function AddFoodScreen() {
   const { appwrite } = useContext(AppwriteContext);
+  const countryCode = useSelector((state: RootState) => state.location.countryCode);
 
   // Load dynamic categories from database for dropdown selection
   const { data: categoriesData, refetch: refetchCategories } = useAppwrite({
@@ -256,9 +260,12 @@ export default function AddFoodScreen() {
 
             {/* Price & Category */}
             <View className="flex-row gap-4">
-              <View className="flex-1 gap-2">
-                <Text className="text-sm font-bold text-gray-700 pl-1" style={{ fontFamily: "Quicksand-Bold" }}>
-                  Price ($ USD)
+              <View className="flex-1 ml-2">
+                <Text
+                  className="text-gray-500 font-semibold mb-2"
+                  style={{ fontFamily: "Quicksand-Bold" }}
+                >
+                  Price ({getCurrencySymbol(countryCode)} {getCurrencyName(countryCode)})
                 </Text>
                 <TextInput
                   placeholder="e.g. 12.99"
@@ -407,7 +414,7 @@ export default function AddFoodScreen() {
                                 }`}
                                 style={{ fontFamily: "Quicksand-Medium" }}
                               >
-                                (+${(cus.price / 10).toFixed(2)})
+                                (+{formatPrice(cus.price / 10, countryCode)})
                               </Text>
                             </TouchableOpacity>
                           );
@@ -468,7 +475,7 @@ export default function AddFoodScreen() {
                                 }`}
                                 style={{ fontFamily: "Quicksand-Medium" }}
                               >
-                                (+${(cus.price / 10).toFixed(2)})
+                                (+{formatPrice(cus.price / 10, countryCode)})
                               </Text>
                             </TouchableOpacity>
                           );

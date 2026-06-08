@@ -24,6 +24,7 @@ import {
 } from "../../store/slices/orderSlice";
 import { RootState } from "../../store/store";
 import AppwriteService from "../lib/services/auth_services/appwrite";
+import { formatPrice, getConvertedAmount, getCurrencyCode } from "../lib/currency";
 
 type PaymentMethodType = "card" | "wallet" | "cod";
 
@@ -38,6 +39,7 @@ export default function CheckoutScreen() {
   const { currentOrder, paymentStatus } = useSelector(
     (state: RootState) => state.order,
   );
+  const countryCode = useSelector((state: RootState) => state.location.countryCode);
 
   // Local payment method selection
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodType>("card");
@@ -58,7 +60,7 @@ export default function CheckoutScreen() {
                 "Bearer sk_test_51TbvAwBKPaQBNlXoqbLGGftRmuZbnIQM4SFMCaapzoAulEk0dqcLVyK1cM9hGVYeOzA82UPgEtOJcemOJog1VILz00PXKGjITL",
               "Content-Type": "application/x-www-form-urlencoded",
             },
-            body: `amount=${Math.round(orderTotal * 100)}&currency=usd`,
+            body: `amount=${Math.round(getConvertedAmount(orderTotal, countryCode) * 100)}&currency=${getCurrencyCode(countryCode)}`,
           },
         );
 
@@ -159,7 +161,7 @@ export default function CheckoutScreen() {
 
       // Auto navigate to tracking screen after 2.2 seconds
       const timer = setTimeout(() => {
-        router.replace("/tracking" as any);
+        router.replace("/(payment)/tracking" as any);
       }, 2200);
 
       return () => clearTimeout(timer);
@@ -558,7 +560,7 @@ export default function CheckoutScreen() {
                   className="text-gray-800 text-sm font-bold"
                   style={{ fontFamily: "Quicksand-Bold" }}
                 >
-                  ${(orderTotal - 5 + 0.5).toFixed(2)}
+                  {formatPrice(orderTotal - 5 + 0.5, countryCode)}
                 </Text>
               </View>
               <View className="flex-row justify-between">
@@ -572,7 +574,7 @@ export default function CheckoutScreen() {
                   className="text-gray-800 text-sm font-bold"
                   style={{ fontFamily: "Quicksand-Bold" }}
                 >
-                  $5.00
+                  {formatPrice(5, countryCode)}
                 </Text>
               </View>
               <View className="flex-row justify-between">
@@ -586,7 +588,7 @@ export default function CheckoutScreen() {
                   className="text-success text-sm font-bold"
                   style={{ fontFamily: "Quicksand-Bold" }}
                 >
-                  -$0.50
+                  -{formatPrice(0.5, countryCode)}
                 </Text>
               </View>
               <View className="border-b border-gray-150 my-1" />
@@ -601,7 +603,7 @@ export default function CheckoutScreen() {
                   className="text-orange-500 text-lg font-bold"
                   style={{ fontFamily: "Quicksand-Bold" }}
                 >
-                  ${orderTotal.toFixed(2)}
+                  {formatPrice(orderTotal, countryCode)}
                 </Text>
               </View>
             </View>
@@ -621,7 +623,7 @@ export default function CheckoutScreen() {
               className="text-white text-lg font-bold"
               style={{ fontFamily: "Quicksand-Bold" }}
             >
-              Pay ${orderTotal.toFixed(2)}
+              Pay {formatPrice(orderTotal, countryCode)}
             </Text>
           </TouchableOpacity>
         </View>

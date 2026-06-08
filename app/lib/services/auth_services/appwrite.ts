@@ -388,6 +388,20 @@ class AppwriteService {
     }
   }
 
+  async getHotelDetails(hotelUserId: string) {
+    try {
+      const hotelRow = await this.database.getRow({
+        databaseId: APPWRITE_DATABASE_ID,
+        tableId: APPWRITE_USERS_COLLECTION_ID,
+        rowId: hotelUserId
+      });
+      return hotelRow;
+    } catch (error) {
+      console.log("Appwrite service :: getHotelDetails() :: " + error);
+      return null;
+    }
+  }
+
   async logout() {
     try {
       return await this.account.deleteSessions();
@@ -527,8 +541,9 @@ class AppwriteService {
         pickupBranchLat: row.pickupBranchLat || null,
         pickupBranchLng: row.pickupBranchLong || row.pickupBranchLng || null,
         pickupBranchLong: row.pickupBranchLong || null,
-        userLat: row.userLat || null,
         userLong: row.userLong || null,
+        rating: row.rating || 0,
+        comment: row.comment || null,
       };
     } catch (error) {
       console.log("Appwrite service :: getOrder() :: " + error);
@@ -567,12 +582,68 @@ class AppwriteService {
         pickupBranchLat: row.pickupBranchLat || null,
         pickupBranchLng: row.pickupBranchLong || row.pickupBranchLng || null,
         pickupBranchLong: row.pickupBranchLong || null,
-        userLat: row.userLat || null,
         userLong: row.userLong || null,
+        rating: row.rating || 0,
+        comment: row.comment || null,
       }));
     } catch (error) {
       console.log("Appwrite service :: getOrders() :: " + error + ". Falling back to local state.");
       return null;
+    }
+  };
+
+  submitOrderRating = async (orderId: string, rating: number, comment: string, items: any[]) => {
+    try {
+      await this.database.updateRow({
+        databaseId: APPWRITE_DATABASE_ID,
+        tableId: "orders",
+        rowId: orderId,
+        data: {
+          rating: rating,
+          comment: comment
+        }
+      });
+
+      // Fetch all orders to calculate exact true average for the items
+      const allOrdersRes = await this.database.listRows({
+        databaseId: APPWRITE_DATABASE_ID,
+        tableId: "orders",
+      });
+
+      const allOrders = allOrdersRes.rows;
+
+      for (const item of items) {
+        let totalRating = 0;
+        let ratingCount = 0;
+
+        for (const orderRow of allOrders) {
+           if (orderRow.rating && orderRow.rating > 0) {
+             try {
+                const orderItems = typeof orderRow.items === "string" ? JSON.parse(orderRow.items) : orderRow.items;
+                if (Array.isArray(orderItems) && orderItems.some((oi: any) => oi.id === item.id)) {
+                   totalRating += orderRow.rating;
+                   ratingCount++;
+                }
+             } catch(e) {}
+           }
+        }
+        
+        if (ratingCount > 0) {
+           const trueAverage = totalRating / ratingCount;
+           await this.database.updateRow({
+             databaseId: APPWRITE_DATABASE_ID,
+             tableId: MENU_COLLECTION_ID,
+             rowId: item.id,
+             data: {
+               rating: parseFloat(trueAverage.toFixed(1))
+             }
+           });
+        }
+      }
+      return true;
+    } catch (error) {
+      console.log("Appwrite service :: submitOrderRating() :: " + error);
+      return false;
     }
   };
 
@@ -641,4 +712,3 @@ class AppwriteService {
 }
 
 export default AppwriteService;
-
